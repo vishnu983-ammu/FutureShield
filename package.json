@@ -10,7 +10,8 @@
     "dev": "nodemon whatsapp-server.js",
     "dev:apk": "nodemon apk-server.js",
     "setup:mobile": "cd mobile && npm install && npx cap add android",
-    "build:apk": "node scripts/build-apk.js"
+    "build:apk": "node scripts/build-apk.js",
+    "test:wa": "node scripts/test-wa-connection.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

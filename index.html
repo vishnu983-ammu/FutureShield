@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="description" content="FutureShield Admin Dashboard — secure portal for managing leads, sales, and commissions." />
   <meta name="robots" content="noindex, nofollow" />
   <meta name="theme-color" content="#0f172a" />
@@ -316,6 +316,247 @@
     body.sidebar-mini .nav-item:hover::after { opacity: 1; }
     /* Company logo in sidebar */
     #sidebar-logo-img { object-fit: cover; }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       MOBILE RESPONSIVE  (< 768px)
+       Ensures nav, tables, modals, and toolbars work on smartphones
+    ══════════════════════════════════════════════════════════════════════ */
+    @media (max-width: 767px) {
+      /* Prevent horizontal page scroll */
+      html, body { overflow-x: hidden; max-width: 100vw; }
+      body.sidebar-mobile-open { overflow: hidden; position: fixed; width: 100%; }
+
+      /* ── Header ─────────────────────────────────────────────── */
+      #main-content > header {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        padding-top: 0.625rem !important;
+        padding-bottom: 0.625rem !important;
+        gap: 0.5rem;
+      }
+      #page-title-mobile {
+        font-size: 0.9375rem !important;
+        line-height: 1.25rem;
+      }
+      #header-role-badge { display: none !important; }
+      #notif-bell-btn,
+      #header-user-btn,
+      #menuBtn {
+        min-width: 2.5rem;
+        min-height: 2.5rem;
+      }
+
+      /* Notification panel — full-width dropdown below header */
+      #notif-bell-wrap .notif-panel,
+      .notif-panel {
+        position: fixed;
+        left: 0.75rem;
+        right: 0.75rem;
+        top: 3.75rem;
+        width: auto !important;
+        max-height: min(70vh, 28rem);
+      }
+      #notif-list { max-height: min(55vh, 22rem) !important; }
+
+      /* Header user menu — fixed so it isn't clipped */
+      #header-user-menu {
+        position: fixed;
+        right: 0.75rem;
+        left: auto;
+        top: 3.75rem;
+        min-width: 11rem;
+        max-width: calc(100vw - 1.5rem);
+      }
+
+      /* ── Sidebar (drawer) ───────────────────────────────────── */
+      #sidebar {
+        width: min(18rem, 88vw) !important;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+      }
+      #sidebar-user-menu {
+        left: 0.5rem;
+        right: 0.5rem;
+      }
+
+      /* ── Main content ───────────────────────────────────────── */
+      #main-content {
+        margin-left: 0 !important;
+        width: 100%;
+        min-height: 100dvh;
+      }
+      #main-content > main {
+        padding: 1rem !important;
+        padding-bottom: max(5rem, calc(1rem + env(safe-area-inset-bottom))) !important;
+      }
+
+      /* ── Section headers & action toolbars ──────────────────── */
+      .dash-section h2 {
+        font-size: 1.125rem !important;
+      }
+      /* Stack Export + Add button rows full-width */
+      .flex.flex-col.sm\:flex-row > .flex.items-center.gap-2,
+      .flex.flex-col.sm\:flex-row > .flex.flex-wrap.items-center.gap-2 {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+      .flex.flex-col.sm\:flex-row > .flex.items-center.gap-2 > button,
+      .flex.flex-col.sm\:flex-row > .flex.items-center.gap-2 > .export-wrap,
+      .flex.flex-col.sm\:flex-row > .flex.flex-wrap.items-center.gap-2 > button {
+        flex: 1 1 calc(50% - 0.25rem);
+        min-width: 0;
+        justify-content: center;
+      }
+      .flex.flex-col.sm\:flex-row > .flex.items-center.gap-2 > button:only-child,
+      .flex.flex-col.sm\:flex-row > .flex.items-center.gap-2 > .export-wrap:only-child {
+        flex: 1 1 100%;
+      }
+      .export-toggle {
+        width: 100%;
+        justify-content: center;
+        min-height: 2.75rem;
+      }
+
+      /* Tab bars (Follow-ups, WhatsApp, etc.) */
+      .flex.items-center.gap-1.bg-gray-100.rounded-xl,
+      .flex.gap-1.bg-gray-100.rounded-xl.p-1 {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+      .flex.items-center.gap-1.bg-gray-100.rounded-xl button,
+      .flex.gap-1.bg-gray-100.rounded-xl.p-1 button {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: center;
+      }
+
+      /* Stat / count grids */
+      .grid.grid-cols-3.gap-4 { grid-template-columns: 1fr !important; gap: 0.75rem !important; }
+      @media (min-width: 480px) {
+        .grid.grid-cols-3.gap-4 { grid-template-columns: repeat(3, 1fr) !important; }
+      }
+
+      /* Dashboard stat cards — slightly tighter */
+      .dash-section .grid.grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-3.gap-6 {
+        gap: 1rem !important;
+      }
+
+      /* ── Tables — horizontal scroll with touch momentum ─────── */
+      .overflow-x-auto {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+      }
+      .overflow-x-auto > table {
+        min-width: 36rem;
+      }
+      .overflow-x-auto table th,
+      .overflow-x-auto table td {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        white-space: nowrap;
+      }
+      /* Allow name columns to wrap on card-style rows if needed */
+      .overflow-x-auto table td:first-child {
+        white-space: normal;
+        min-width: 7rem;
+        max-width: 10rem;
+      }
+
+      /* ── Modals — bottom-sheet style on phones ──────────────── */
+      .modal-overlay {
+        padding: 0 !important;
+        align-items: flex-end !important;
+      }
+      .modal-box,
+      .detail-modal-box {
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: 92dvh !important;
+        border-radius: 1.25rem 1.25rem 0 0 !important;
+        margin: 0 !important;
+      }
+      .modal-box .px-6,
+      .detail-modal-box .px-6 {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+      }
+
+      /* ── Forms & inputs — touch-friendly ────────────────────── */
+      .form-field,
+      .login-field,
+      select.form-field {
+        font-size: 1rem !important; /* prevents iOS zoom on focus */
+        min-height: 2.75rem;
+      }
+      button, .nav-item, .export-toggle, .user-menu-item {
+        -webkit-tap-highlight-color: transparent;
+      }
+      .api-pin-input { width: 100% !important; max-width: 16rem; }
+
+      /* ── Toast — full width at bottom ───────────────────────── */
+      #toast {
+        left: 0.75rem !important;
+        right: 0.75rem !important;
+        bottom: 1rem !important;
+        min-width: 0 !important;
+        max-width: none !important;
+      }
+
+      /* ── Charts ─────────────────────────────────────────────── */
+      .perf-chart-wrap,
+      canvas[id*="chart"],
+      .h-64, .h-72, .h-80 {
+        max-width: 100%;
+      }
+
+      /* ── Login page ─────────────────────────────────────────── */
+      .login-card {
+        margin: 1rem;
+        padding: 1.5rem !important;
+        max-width: calc(100vw - 2rem);
+      }
+      #login-overlay .flex { padding: 1rem; }
+
+      /* ── Product cards & permission rows ────────────────────── */
+      .product-card {
+        flex-direction: column;
+        align-items: flex-start !important;
+      }
+      .perm-card {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+      .perm-card .flex-1 { min-width: calc(100% - 3.5rem); }
+
+      /* ── WhatsApp connection grid ───────────────────────────── */
+      #wa-tab-connection .grid.lg\:grid-cols-2 {
+        grid-template-columns: 1fr !important;
+      }
+      #wa-qr-container {
+        width: 100% !important;
+        max-width: 14rem;
+        height: auto !important;
+        aspect-ratio: 1;
+      }
+
+      /* ── Company / App Management grids ─────────────────────── */
+      .grid.lg\:grid-cols-2,
+      .grid.lg\:grid-cols-5 {
+        grid-template-columns: 1fr !important;
+      }
+      .lg\:col-span-2, .lg\:col-span-3 {
+        grid-column: span 1 / span 1 !important;
+      }
+    }
+
+    /* Small phones (< 380px) */
+    @media (max-width: 379px) {
+      #header-user-name { display: none !important; }
+      #page-title-mobile { font-size: 0.875rem !important; }
+      .flex.flex-col.sm\:flex-row > .flex.items-center.gap-2 > button {
+        flex: 1 1 100%;
+        font-size: 0.8125rem;
+      }
+    }
 
     /* ── Login Page ──────────────────────────────────────── */
     #login-overlay {
@@ -880,7 +1121,7 @@
   </style>
 </head>
 
-<body class="bg-gray-100 text-gray-800 flex h-screen overflow-hidden">
+<body class="bg-gray-100 text-gray-800 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden">
 
   <!-- ═══════════════════════════════════════════════════════════
        APP INIT SPLASH — shown during Firebase cold-start (~300–800 ms).
@@ -1082,6 +1323,15 @@
                flex-1 truncate text-white">
         AdminPanel
       </span>
+
+      <!-- Mobile close button -->
+      <button type="button" onclick="toggleSidebar()" aria-label="Close menu"
+        class="md:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg
+               text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Navigation Links -->
@@ -1387,20 +1637,20 @@
 
 
   <!-- ===================== MAIN CONTENT ===================== -->
-  <div id="main-content" class="flex-1 flex flex-col md:ml-64 overflow-y-auto" style="transition:margin-left 0.28s cubic-bezier(0.4,0,0.2,1)">
+  <div id="main-content" class="flex-1 flex flex-col w-full min-w-0 md:ml-64 overflow-y-auto" style="transition:margin-left 0.28s cubic-bezier(0.4,0,0.2,1)">
 
     <!-- Top Header Bar -->
-    <header class="bg-white shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+    <header class="bg-white shadow-sm px-3 sm:px-6 py-3 sm:py-4 flex items-center gap-2 sm:gap-3 sticky top-0 z-40 min-w-0">
       <!-- Mobile hamburger -->
-      <button id="menuBtn" onclick="toggleSidebar()"
-        class="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+      <button id="menuBtn" onclick="toggleSidebar()" aria-label="Open menu"
+        class="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 flex-shrink-0">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
 
-      <!-- Company branding in header (desktop) -->
-      <div class="hidden md:flex items-center gap-2.5">
+      <!-- Company branding + title (desktop) -->
+      <div class="hidden md:flex items-center gap-2.5 min-w-0 flex-1">
         <div id="header-logo-wrap"
           class="w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
           <img id="header-logo-img" src="" alt="" class="w-full h-full object-cover hidden rounded-lg"/>
@@ -1408,14 +1658,14 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"/>
           </svg>
         </div>
-        <h1 id="page-title" class="text-xl font-semibold text-gray-800">Dashboard Overview</h1>
+        <h1 id="page-title" class="text-xl font-semibold text-gray-800 truncate">Dashboard Overview</h1>
       </div>
 
-      <!-- Mobile page title (no logo) -->
-      <h1 id="page-title-mobile" class="md:hidden text-lg font-semibold text-gray-800">Dashboard Overview</h1>
+      <!-- Mobile page title -->
+      <h1 id="page-title-mobile" class="md:hidden flex-1 min-w-0 text-base sm:text-lg font-semibold text-gray-800 truncate text-center sm:text-left">Dashboard Overview</h1>
 
-      <!-- Right: Firebase status + user identity + logout -->
-      <div class="flex items-center gap-3">
+      <!-- Right: status, notifications, user menu -->
+      <div class="flex items-center gap-1.5 sm:gap-3 flex-shrink-0 ml-auto">
         <span id="fb-status"
           class="hidden sm:inline text-xs px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 font-medium">
           Connecting…
@@ -1538,7 +1788,7 @@
     </header>
 
     <!-- ─────────────── PAGE BODY ─────────────── -->
-    <main class="p-6">
+    <main class="p-4 sm:p-6">
 
       <!-- ═══════════════════════════════════════════════
            SECTION: DASHBOARD (default active)
@@ -2033,7 +2283,7 @@
         </div>
 
         <!-- Counts strip -->
-        <div class="grid grid-cols-3 gap-4 mb-6">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
           <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
             <p class="text-xs font-semibold text-amber-500 uppercase tracking-wide">Due Today</p>
             <p id="fup-count-today" class="text-2xl font-bold text-amber-700 mt-0.5">0</p>
@@ -2208,6 +2458,16 @@
                 Save &amp; Test Connection
               </button>
               <p id="wa-config-status" class="text-xs text-center text-gray-400 hidden"></p>
+              <!-- Connection debug log (visible after test) -->
+              <div id="wa-debug-wrap" class="hidden mt-2">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Connection Log</span>
+                  <button type="button" onclick="window.clearWaDebugLog()"
+                    class="text-xs text-gray-400 hover:text-gray-600">Clear</button>
+                </div>
+                <pre id="wa-debug-log"
+                  class="text-xs bg-slate-900 text-green-400 rounded-lg p-3 max-h-40 overflow-y-auto whitespace-pre-wrap font-mono leading-relaxed"></pre>
+              </div>
             </div>
           </div>
         </div>
@@ -9706,7 +9966,9 @@
 
       sidebar.classList.toggle("-translate-x-full", isOpen);
       overlay.classList.toggle("hidden", isOpen);
+      document.body.classList.toggle("sidebar-mobile-open", !isOpen);
     }
+    window.toggleSidebar = toggleSidebar;
 
     /* ═══════════════════════════════════════════════════════════
        SMART FOLLOW-UP SYSTEM — UI HELPERS
@@ -12647,21 +12909,64 @@
       const WA_CONFIG_KEY = "wa_server_config";
 
       // ── Helpers ──────────────────────────────────────────────────────────
-      function waGet(path) {
+      function waLog(level, message, detail) {
+        const ts = new Date().toLocaleTimeString("en-IN", { hour12: false });
+        const line = detail
+          ? `[${ts}] ${level.toUpperCase()} ${message}\n       ${detail}`
+          : `[${ts}] ${level.toUpperCase()} ${message}`;
+        console.log(`[WA-UI] ${message}`, detail || "");
+        const wrap = document.getElementById("wa-debug-wrap");
+        const pre  = document.getElementById("wa-debug-log");
+        if (wrap) wrap.classList.remove("hidden");
+        if (pre)  pre.textContent = (pre.textContent ? pre.textContent + "\n" : "") + line;
+        if (pre)  pre.scrollTop = pre.scrollHeight;
+      }
+
+      window.clearWaDebugLog = function () {
+        const pre  = document.getElementById("wa-debug-log");
+        const wrap = document.getElementById("wa-debug-wrap");
+        if (pre)  pre.textContent = "";
+        if (wrap) wrap.classList.add("hidden");
+      };
+
+      /** Parse JSON safely from a fetch Response */
+      async function parseWaResponse(res) {
+        const text = await res.text();
+        try { return text ? JSON.parse(text) : {}; }
+        catch { return { raw: text }; }
+      }
+
+      /** Fetch with auth + structured error on non-2xx */
+      async function waFetch(path, options = {}) {
         if (!_waServerUrl || !_waToken) throw new Error("Server not configured.");
-        return fetch(`${_waServerUrl}${path}`, {
-          headers: { Authorization: `Bearer ${_waToken}` },
+        const url = `${_waServerUrl}${path}`;
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            ...(options.headers || {}),
+            Authorization: `Bearer ${_waToken}`,
+          },
         });
+        const body = await parseWaResponse(res);
+        if (!res.ok) {
+          const err = new Error(body.error || body.message || `HTTP ${res.status}`);
+          err.status = res.status;
+          err.code   = body.code;
+          err.body   = body;
+          err.url    = url;
+          throw err;
+        }
+        return { res, body };
+      }
+
+      function waGet(path) {
+        return waFetch(path);
       }
 
       function waPost(path, body) {
-        if (!_waServerUrl || !_waToken) throw new Error("Server not configured.");
-        return fetch(`${_waServerUrl}${path}`, {
+        return waFetch(path, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${_waToken}`,
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
       }
@@ -12691,14 +12996,109 @@
 
       // ── Classify fetch errors for user-friendly messages ─────────────────────
       function classifyFetchError(err, url) {
-        if (err.name === "AbortError") return "Request timed out. Is the server running?";
+        if (err.code === "INVALID_TOKEN") {
+          return (err.message || "Token rejected.") +
+            (err.body?.hint ? `\nHint: ${err.body.hint}` : "");
+        }
+        if (err.code === "MISSING_TOKEN") {
+          return "Authorization header missing. Internal UI error — refresh the page.";
+        }
+        if (err.status === 401) {
+          return `Authentication failed (401).\n` +
+            "Your Server Secret Token does not match WA_SECRET on the server.\n" +
+            "Default token: futureshield-wa-secret";
+        }
+        if (err.name === "AbortError") {
+          return `Request timed out after 6s.\nIs the server running?\nRun: npm start`;
+        }
         if (err instanceof TypeError && err.message.toLowerCase().includes("fetch")) {
-          return `Cannot reach ${url}. Possible causes:\n` +
-            "1. The Node.js server is not running (run 'npm start')\n" +
-            "2. CORS is blocked — open the server URL directly in your browser to verify\n" +
-            "3. Wrong port — confirm the URL matches what the server printed on startup";
+          const pageProto = window.location.protocol;
+          if (pageProto === "https:" && url.startsWith("http:")) {
+            return `Blocked by browser (mixed content).\n` +
+              `This page is HTTPS but the server URL is HTTP (${url}).\n` +
+              "Use http://localhost for the dashboard, or run the WA server with HTTPS.";
+          }
+          if (window.location.protocol === "file:") {
+            return `Cannot reach ${url} from a local file.\n` +
+              "Open the dashboard via a local server (e.g. Live Server on port 5500) or deploy it.";
+          }
+          return `Cannot reach ${url}.\n\nPossible causes:\n` +
+            "1. Server not running — run: npm start\n" +
+            "2. Wrong port — confirm http://localhost:3001\n" +
+            "3. Firewall blocking the connection\n" +
+            "4. Open http://localhost:3001/wa/health in your browser to verify";
         }
         return err.message || "Unknown error";
+      }
+
+      /** Full connection test — mirrors scripts/test-wa-connection.js */
+      async function runWaConnectionTest(url, token) {
+        const results = [];
+        const add = (step, ok, detail) => { results.push({ step, ok, detail }); };
+
+        // Step 1: Health (no auth)
+        try {
+          const res  = await fetchWithTimeout(`${url}/wa/health`, {}, 6000);
+          const data = await parseWaResponse(res);
+          if (res.ok && data.ok) {
+            add("Health check", true, `uptime ${data.uptime}s, port ${data.port || "?"}`);
+            if (data.whatsapp?.initError) {
+              add("Puppeteer/Chrome", false, data.whatsapp.initError);
+              add("Fix", false, "Run: npx puppeteer browsers install chrome");
+            }
+            if (data.expectedTokenPrefix) {
+              add("Token hint", true, `Server expects token starting with "${data.expectedTokenPrefix}…" (${data.expectedTokenLength} chars)`);
+              if (token.slice(0, 8) !== data.expectedTokenPrefix) {
+                add("Token prefix match", false, `You entered "${token.slice(0, 8)}…" — mismatch!`);
+              }
+            }
+          } else {
+            add("Health check", false, `HTTP ${res.status}: ${JSON.stringify(data)}`);
+            return results;
+          }
+        } catch (err) {
+          add("Health check", false, classifyFetchError(err, url));
+          return results;
+        }
+
+        // Step 2: Auth test
+        try {
+          const res  = await fetchWithTimeout(`${url}/wa/test-auth`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }, 6000);
+          const data = await parseWaResponse(res);
+          if (res.ok && data.ok) {
+            add("Bearer token", true, "Token accepted by server");
+          } else if (res.status === 401) {
+            add("Bearer token", false, data.error || "401 Unauthorized — token mismatch");
+            if (data.hint) add("Fix", false, data.hint);
+            return results;
+          } else {
+            add("Bearer token", false, `HTTP ${res.status}`);
+            return results;
+          }
+        } catch (err) {
+          add("Bearer token", false, classifyFetchError(err, url));
+          return results;
+        }
+
+        // Step 3: WhatsApp status
+        try {
+          const res  = await fetchWithTimeout(`${url}/wa/status`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }, 6000);
+          const data = await parseWaResponse(res);
+          if (res.ok) {
+            add("WhatsApp status", true,
+              `connected=${data.connected}, qrAvailable=${data.qrAvailable}`);
+          } else {
+            add("WhatsApp status", false, `HTTP ${res.status}`);
+          }
+        } catch (err) {
+          add("WhatsApp status", false, classifyFetchError(err, url));
+        }
+
+        return results;
       }
 
       // ── Save config ───────────────────────────────────────────────────────
@@ -12721,31 +13121,46 @@
         _waToken     = token;
         sessionStorage.setItem(WA_CONFIG_KEY, JSON.stringify({ url, token }));
 
-        const statusEl = document.getElementById("wa-config-status");
-        if (statusEl) { statusEl.textContent = "Testing connection…"; statusEl.classList.remove("hidden"); }
+        window.clearWaDebugLog();
+        waLog("info", "Starting connection test…", `URL=${url}`);
 
-        try {
-          // Health check — no auth, tests basic reachability and CORS
-          const res  = await fetchWithTimeout(`${url}/wa/health`, {}, 6000);
-          const data = await res.json();
-          if (data.ok) {
-            if (statusEl) {
-              statusEl.textContent = `✓ Server reachable — uptime ${data.uptime}s. Loading QR…`;
-              statusEl.style.color = "#16a34a";
-            }
-            window.showToast("WhatsApp server connected! Loading QR code…", "success");
-            // ── Bug fix #1: Call QR fetch immediately, don't wait for poll interval
-            window.refreshWaQr();
-            // ── Bug fix #3: Also start status poll (fires immediately + every 5s)
-            window.pollWaStatus();
-          } else throw new Error("Unexpected server response.");
-        } catch (err) {
-          const msg = classifyFetchError(err, url);
+        const statusEl = document.getElementById("wa-config-status");
+        if (statusEl) {
+          statusEl.classList.remove("hidden");
+          statusEl.textContent = "Testing connection (health → auth → status)…";
+          statusEl.style.color = "#6b7280";
+        }
+
+        const results = await runWaConnectionTest(url, token);
+        results.forEach(r => waLog(r.ok ? "ok" : "fail", r.step, r.detail));
+
+        const healthOk = results.find(r => r.step === "Health check")?.ok;
+        const authOk   = results.find(r => r.step === "Bearer token")?.ok;
+
+        if (healthOk && authOk) {
           if (statusEl) {
-            statusEl.textContent = `✗ ${msg}`;
+            statusEl.textContent = "✓ All checks passed. Loading QR code…";
+            statusEl.style.color = "#16a34a";
+          }
+          window.showToast("WhatsApp server connected! Token verified.", "success");
+          window.refreshWaQr();
+          window.pollWaStatus();
+        } else if (healthOk && !authOk) {
+          const authDetail = results.find(r => r.step === "Bearer token")?.detail || "";
+          if (statusEl) {
+            statusEl.textContent = "✗ Server reachable but token rejected.";
             statusEl.style.color = "#dc2626";
           }
-          window.showToast("Could not reach WhatsApp server. See details below.", "error");
+          window.showToast("Token mismatch — see Connection Log below.", "error");
+          waLog("fail", "Action required", "Set WA_SECRET=futureshield-wa-secret on the server, or update the dashboard token.");
+        } else {
+          const detail = results.find(r => !r.ok)?.detail || "Unknown error";
+          if (statusEl) {
+            statusEl.textContent = "✗ Could not reach server.";
+            statusEl.style.color = "#dc2626";
+          }
+          window.showToast("Connection failed — see Connection Log below.", "error");
+          waLog("fail", "Tip", "Run: npm start   then: node scripts/test-wa-connection.js");
         }
       };
 
@@ -12775,19 +13190,28 @@
         async function tick() {
           if (!_waServerUrl) return;
           try {
-            const res  = await waGet("/wa/status");
-            const data = await res.json();
+            const { body: data } = await waGet("/wa/status");
             _waConnected = !!data.connected;
             updateConnectionBadge(data);
             if (_waConnected) {
               clearInterval(_waStatInterval);
-              _waQrInterval && clearInterval(_waQrInterval);
-              _waQrInterval = null;
+              stopWaQrRetries();
               showConnectedQrPanel(data.phone);
+              return;
+            }
+            // Stop infinite QR retry if server reports init failure
+            if (data.initError) {
+              waLog("fail", "WhatsApp init error (from status)", data.initError);
+              showWaInitErrorPanel(data.initError);
+              clearInterval(_waStatInterval);
             }
           } catch (err) {
             _waConnected = false;
             updateConnectionBadge({ connected: false, qrAvailable: false });
+            if (err.status === 401) {
+              waLog("fail", "Status poll", "401 Unauthorized — re-save config with correct token");
+              clearInterval(_waStatInterval);
+            }
           }
         }
 
@@ -12835,8 +13259,39 @@
       }
 
       // ── QR Code Refresh ───────────────────────────────────────────────────
-      // Bug fixes: auto-retry when QR not ready, clear old retry timer, better errors
+      const WA_QR_MAX_RETRIES = 20; // ~60s then show error (was infinite → Attempt 153+)
       let _waQrRetryTimer = null;
+
+      function stopWaQrRetries() {
+        clearTimeout(_waQrRetryTimer);
+        clearInterval(_waQrInterval);
+        _waQrRetryTimer = null;
+        _waQrInterval = null;
+      }
+
+      function showWaInitErrorPanel(message, extraHtml) {
+        stopWaQrRetries();
+        const container = document.getElementById("wa-qr-container");
+        if (!container) return;
+        container.dataset.retries = "0";
+        container.innerHTML = `
+          <div class="text-center px-3">
+            <svg class="w-8 h-8 text-red-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <p class="text-sm text-red-600 font-medium">WhatsApp engine failed to start</p>
+            <p class="text-xs text-gray-500 mt-2 text-left whitespace-pre-wrap">${esc(message)}</p>
+            ${extraHtml || ""}
+            <p class="text-xs text-gray-400 mt-3 text-left">Fix in terminal (project folder):</p>
+            <code class="block text-xs bg-gray-100 text-gray-800 px-2 py-1.5 rounded mt-1 text-left">npx puppeteer browsers install chrome</code>
+            <p class="text-xs text-gray-400 mt-2">Then restart server: <code class="bg-gray-100 px-1 rounded">npm start</code></p>
+            <button onclick="window.restartWaClient()"
+              class="mt-3 px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg">
+              Retry Initialization
+            </button>
+          </div>`;
+      }
 
       window.refreshWaQr = async function () {
         const container = document.getElementById("wa-qr-container");
@@ -12864,8 +13319,7 @@
           </div>`;
 
         try {
-          const res  = await waGet("/wa/qr");
-          const data = await res.json();
+          const { body: data } = await waGet("/wa/qr");
 
           // Already connected
           if (data.connected) {
@@ -12876,15 +13330,46 @@
             return;
           }
 
-          // Bug fix #2: QR not ready — auto-retry after 3s (Puppeteer still starting)
+          // QR not ready — auto-retry with cap (prevents Attempt 153+ loop)
           if (!data.qr && !data.qrReady) {
             let retryCount = parseInt(container.dataset.retries || "0", 10) + 1;
             container.dataset.retries = retryCount;
+
+            // Chrome not detected on server — fail fast
+            if (data.chromeDetected === false && retryCount >= 3) {
+              waLog("fail", "Chrome not detected on server", data.message || "");
+              showWaInitErrorPanel(
+                data.message || "Google Chrome was not found on the server machine.",
+                "<p class=\"text-xs text-amber-600 mt-2\">Install Chrome or run the Puppeteer install command below.</p>"
+              );
+              return;
+            }
+
+            // Max retries exceeded
+            if (retryCount >= WA_QR_MAX_RETRIES) {
+              waLog("fail", "QR wait timeout", `Gave up after ${retryCount} attempts (~${retryCount * 3}s)`);
+              showWaInitErrorPanel(
+                `QR code did not appear after ${retryCount} attempts (~${Math.round(retryCount * 3 / 60)} min).\n\n` +
+                (data.message || "Puppeteer/Chrome may not be installed or is stuck."),
+                data.waitSeconds != null
+                  ? `<p class="text-xs text-gray-400 mt-1">Server waited ${data.waitSeconds}s (max ${data.maxWaitSeconds || 90}s)</p>`
+                  : ""
+              );
+              return;
+            }
+
+            const waitHint = data.waitSeconds != null ? ` (${data.waitSeconds}s)` : "";
+            waLog("info", "QR not ready", `Attempt ${retryCount}/${WA_QR_MAX_RETRIES}${waitHint}`);
             container.innerHTML = `
               <div class="text-center px-4">
                 <div class="w-8 h-8 border-2 border-amber-200 border-t-amber-500 rounded-full animate-spin mx-auto mb-3"></div>
-                <p class="text-sm text-amber-600 font-medium">Server is starting up…</p>
-                <p class="text-xs text-gray-400 mt-1">Attempt ${retryCount} — WhatsApp is initialising.<br/>Auto-retrying in 3s…</p>
+                <p class="text-sm text-amber-600 font-medium">Starting WhatsApp engine…</p>
+                <p class="text-xs text-gray-400 mt-1">
+                  Attempt ${retryCount} of ${WA_QR_MAX_RETRIES}${waitHint}<br/>
+                  ${data.chromeDetected === false
+                    ? "<span class=\"text-red-500\">Chrome not found on server</span>"
+                    : "Waiting for QR code…"}
+                </p>
               </div>`;
             clearTimeout(_waQrRetryTimer);
             _waQrRetryTimer = setTimeout(window.refreshWaQr, 3000);
@@ -12894,6 +13379,8 @@
           // QR available — display it
           if (data.qr) {
             container.dataset.retries = "0";
+            stopWaQrRetries();
+            waLog("ok", "QR received", `${data.qr.length} chars`);
             container.innerHTML = `<img src="${esc(data.qr)}" alt="Scan with WhatsApp"
               class="w-48 h-48 rounded-lg border border-gray-200" style="image-rendering:pixelated" />`;
             // QR codes expire after ~20s — auto-refresh
@@ -12902,6 +13389,13 @@
           }
 
         } catch (err) {
+          // Handle 503 initError from server (Puppeteer/Chrome missing or timed out)
+          if (err.status === 503 && err.body?.initError) {
+            waLog("fail", "WhatsApp client init error", err.body.initError);
+            showWaInitErrorPanel(err.body.message || err.body.initError);
+            return;
+          }
+          waLog("fail", "QR fetch failed", err.message || String(err));
           const friendly = classifyFetchError(err, _waServerUrl);
           container.innerHTML = `
             <div class="text-center px-3">
@@ -12917,19 +13411,45 @@
         }
       };
 
+      // ── Retry WhatsApp client init (after Chrome/Puppeteer fix) ───────────
+      window.restartWaClient = async function () {
+        try {
+          stopWaQrRetries();
+          const container = document.getElementById("wa-qr-container");
+          if (container) {
+            container.dataset.retries = "0";
+            container.innerHTML = `<div class="text-center"><div class="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3"></div><p class="text-xs text-gray-400">Restarting WhatsApp engine…</p></div>`;
+          }
+          waLog("info", "Retrying WhatsApp client init…");
+          const { body } = await waPost("/wa/restart", {});
+          if (body.initError) {
+            waLog("fail", "Restart failed", body.initError);
+            showWaInitErrorPanel(body.initError);
+            window.showToast("Init failed — see QR panel for fix steps.", "error");
+          } else {
+            waLog("ok", "Restart triggered", body.message || "OK");
+            window.showToast("Initialization restarted. Waiting for QR…", "success");
+            setTimeout(window.refreshWaQr, 3000);
+            window.pollWaStatus();
+          }
+        } catch (err) {
+          waLog("fail", "Restart request failed", err.message);
+          window.showToast("Restart failed: " + err.message, "error");
+        }
+      };
+
       // ── Disconnect ────────────────────────────────────────────────────────
       window.disconnectWhatsApp = async function () {
         if (!confirm("Disconnect WhatsApp? You will need to scan the QR code again.")) return;
         try {
-          const res = await waPost("/wa/disconnect", {});
-          if (res.ok) {
-            _waConnected = false;
-            window.showToast("WhatsApp disconnected.", "success");
-            const container = document.getElementById("wa-qr-container");
-            if (container) container.innerHTML = `<p class="text-sm text-gray-400 text-center px-4">Disconnected. Refreshing QR…</p>`;
-            setTimeout(window.refreshWaQr, 3000);
-          }
+          await waPost("/wa/disconnect", {});
+          _waConnected = false;
+          window.showToast("WhatsApp disconnected.", "success");
+          const container = document.getElementById("wa-qr-container");
+          if (container) container.innerHTML = `<p class="text-sm text-gray-400 text-center px-4">Disconnected. Refreshing QR…</p>`;
+          setTimeout(window.refreshWaQr, 3000);
         } catch (err) {
+          waLog("fail", "Disconnect failed", err.message);
           window.showToast("Disconnect failed: " + err.message, "error");
         }
       };
@@ -13133,16 +13653,12 @@
         if (statusEl) { statusEl.textContent = "Sending request to server…"; statusEl.classList.remove("hidden"); }
 
         try {
-          const res  = await waPost("/wa/send", { messages });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Server error");
-
+          const { body: data } = await waPost("/wa/send", { messages });
           window.showToast(`${data.queued} message(s) queued! Delivery will take ~${Math.ceil(data.queued * 4.5 / 60)} min.`, "success");
           if (statusEl) statusEl.textContent = `${data.queued} messages queued. Check the History tab for status.`;
-
-          // Auto-switch to history after 2s
           setTimeout(() => window.switchWaTab("history"), 2000);
         } catch (err) {
+          waLog("fail", "Bulk send failed", err.message);
           window.showToast("Failed to queue messages: " + err.message, "error");
           if (statusEl) statusEl.textContent = "Error: " + err.message;
         } finally {
@@ -13166,8 +13682,7 @@
         tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-sm text-gray-400">Loading…</td></tr>`;
 
         try {
-          const res  = await waGet("/wa/messages?limit=100");
-          const data = await res.json();
+          const { body: data } = await waGet("/wa/messages?limit=100");
 
           const statusBadge = {
             sent:    `<span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium">Sent</span>`,

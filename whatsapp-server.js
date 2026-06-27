@@ -29,6 +29,8 @@
 // ── Load .env if present ─────────────────────────────────────────────────────
 try { require("dotenv").config(); } catch (_) { /* dotenv is optional */ }
 
+const fs         = require("fs");
+const path       = require("path");
 const express    = require("express");
 const cors       = require("cors");
 const qrcode     = require("qrcode");
@@ -40,12 +42,37 @@ const WA_SECRET    = process.env.WA_SECRET            || "futureshield-wa-secret
 const COUNTRY_CODE = process.env.COUNTRY_CODE         || "91";
 const DELAY_MIN    = parseInt(process.env.MSG_DELAY_MIN || "3000", 10);
 const DELAY_MAX    = parseInt(process.env.MSG_DELAY_MAX || "6000", 10);
+const INIT_TIMEOUT_MS = parseInt(process.env.WA_INIT_TIMEOUT || "90000", 10); // 90s max wait for QR
+
+/** Locate Chrome/Chromium for Puppeteer (Windows-friendly) */
+function findChromeExecutable() {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROME_PATH,
+    process.env.GOOGLE_CHROME_SHIM,
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe"),
+    path.join(process.env.PROGRAMFILES || "", "Google", "Chrome", "Application", "chrome.exe"),
+    path.join(process.env["PROGRAMFILES(X86)"] || "", "Google", "Chrome", "Application", "chrome.exe"),
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch (_) {}
+  }
+  return null;
+}
+
+const CHROME_PATH = findChromeExecutable();
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let _qrDataUrl   = null;   // base64 PNG of current QR code
 let _isReady     = false;  // true when WhatsApp session is active
 let _phoneInfo   = null;   // { number, pushname } after connection
 let _isProcessing = false; // true while the queue worker is running
+let _clientInitError = null; // set if Puppeteer/Chrome fails to start
+let _clientInitializing = false;
+let _initStartedAt = null;   // when current init attempt began
+let _qrWaitLogCount = 0;     // throttle /wa/qr waiting logs
 
 /** @type {Array<MessageRecord>} */
 const _queue   = [];       // pending / sending
@@ -69,6 +96,7 @@ const client = new Client({
   authStrategy: new LocalAuth({ clientId: "futureshield" }),
   puppeteer: {
     headless: true,
+    ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}),
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -116,11 +144,78 @@ client.on("disconnected", (reason) => {
   _qrDataUrl = null;
   _phoneInfo = null;
   // Re-initialise so a new QR is generated for reconnection
-  setTimeout(() => client.initialize(), 3000);
+  setTimeout(() => initWhatsAppClient(), 3000);
 });
 
-console.log("[WA] Initialising WhatsApp client…");
-client.initialize();
+/** Detect init stall (Puppeteer hung or Chrome missing) */
+function checkInitStall() {
+  if (_isReady || _qrDataUrl || _clientInitError) return null;
+  if (!_initStartedAt) return null;
+  const elapsed = Date.now() - _initStartedAt;
+  if (elapsed < INIT_TIMEOUT_MS) return null;
+
+  const chromeHint = CHROME_PATH
+    ? `Chrome found at ${CHROME_PATH} but WhatsApp did not start in ${INIT_TIMEOUT_MS / 1000}s.`
+    : "Google Chrome not found. Install Chrome or run: npx puppeteer browsers install chrome";
+
+  return `${chromeHint} Try: POST /wa/restart or restart npm start.`;
+}
+
+/** Start WhatsApp client without crashing the HTTP server on Puppeteer errors */
+async function initWhatsAppClient() {
+  if (_clientInitializing || _isReady) return;
+  _clientInitializing = true;
+  _clientInitError = null;
+  _initStartedAt = Date.now();
+  _qrWaitLogCount = 0;
+
+  console.log("[WA] Initialising WhatsApp client (Puppeteer)…");
+  if (CHROME_PATH) {
+    console.log(`[WA] Using Chrome: ${CHROME_PATH}`);
+  } else {
+    console.warn("[WA] Chrome not found in standard paths.");
+    console.warn("[WA] Install: npx puppeteer browsers install chrome");
+    console.warn("[WA] Or set PUPPETEER_EXECUTABLE_PATH to your chrome.exe");
+  }
+
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(
+        `WhatsApp initialization timed out after ${INIT_TIMEOUT_MS / 1000}s. ` +
+        (CHROME_PATH
+          ? "Chrome is installed but Puppeteer hung — try POST /wa/restart."
+          : "Install Chrome: npx puppeteer browsers install chrome")
+      ));
+    }, INIT_TIMEOUT_MS);
+  });
+
+  try {
+    await Promise.race([client.initialize(), timeoutPromise]);
+    console.log("[WA] Client initialize() completed — waiting for QR or session restore…");
+  } catch (err) {
+    _clientInitError = err.message || String(err);
+    console.error("[WA] Client init failed (HTTP server still running):", _clientInitError);
+    console.error("[WA] Fix: npx puppeteer browsers install chrome");
+    console.error("[WA] Retry: POST /wa/restart with Bearer token");
+    try { await client.destroy(); } catch (destroyErr) {
+      console.warn("[WA] destroy after failed init:", destroyErr.message);
+    }
+  } finally {
+    _clientInitializing = false;
+  }
+}
+
+async function resetAndInitClient() {
+  _clientInitializing = false;
+  _clientInitError = null;
+  _initStartedAt = null;
+  _qrDataUrl = null;
+  _isReady = false;
+  _phoneInfo = null;
+  try { await client.destroy(); } catch (_) {}
+  await new Promise(r => setTimeout(r, 1500));
+  await initWhatsAppClient();
+}
 
 // ── Express App ───────────────────────────────────────────────────────────────
 const app = express();
@@ -136,13 +231,46 @@ app.use(cors({
 app.options("*", cors());     // Pre-flight for all routes
 app.use(express.json({ limit: "2mb" }));
 
+// ── Request logging (skip noisy health checks unless DEBUG=1) ─────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  const isHealth = req.path === "/wa/health";
+  res.on("finish", () => {
+    const ms = Date.now() - start;
+    if (process.env.DEBUG === "1" || !isHealth || res.statusCode >= 400) {
+      const auth = req.headers.authorization ? "Bearer ***" : "none";
+      console.log(`[HTTP] ${req.method} ${req.path} → ${res.statusCode} (${ms}ms) auth=${auth}`);
+    }
+  });
+  next();
+});
+
 // ── Auth Middleware ───────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
-  const auth  = req.headers["authorization"] || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (token !== WA_SECRET) {
-    return res.status(401).json({ error: "Unauthorized. Provide a valid Bearer token." });
+  const authHeader = req.headers["authorization"] || "";
+  const hasBearer  = authHeader.startsWith("Bearer ");
+  const token      = hasBearer ? authHeader.slice(7) : "";
+
+  if (!hasBearer || !token) {
+    console.warn(`[AUTH] ${req.method} ${req.path} — rejected: missing Bearer token`);
+    return res.status(401).json({
+      error: "Unauthorized. Send header: Authorization: Bearer <WA_SECRET>",
+      code:  "MISSING_TOKEN",
+    });
   }
+
+  if (token !== WA_SECRET) {
+    console.warn(
+      `[AUTH] ${req.method} ${req.path} — rejected: token mismatch ` +
+      `(received ${token.length} chars, expected ${WA_SECRET.length} chars)`
+    );
+    return res.status(401).json({
+      error: "Unauthorized. Bearer token does not match WA_SECRET on the server.",
+      code:  "INVALID_TOKEN",
+      hint:  `Server expects token starting with "${WA_SECRET.slice(0, 8)}…"`,
+    });
+  }
+
   next();
 }
 
@@ -204,9 +332,35 @@ async function processQueue() {
 // ROUTES
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Health check — no auth required (for uptime monitors) */
+/** Health check — no auth required (for uptime monitors + dashboard reachability test) */
 app.get("/wa/health", (_req, res) => {
-  res.json({ ok: true, uptime: Math.floor(process.uptime()) });
+  res.json({
+    ok: true,
+    service: "futureshield-whatsapp",
+    port: PORT,
+    uptime: Math.floor(process.uptime()),
+    whatsapp: {
+      connected: _isReady,
+      qrAvailable: !!_qrDataUrl,
+      initializing: _clientInitializing,
+      initError: _clientInitError,
+    },
+    // Helps debug token mismatches without exposing the full secret
+    expectedTokenPrefix: WA_SECRET.slice(0, 8),
+    expectedTokenLength: WA_SECRET.length,
+  });
+});
+
+/**
+ * GET /wa/test-auth
+ * Authenticated ping — use after /wa/health to verify Bearer token.
+ */
+app.get("/wa/test-auth", requireAuth, (_req, res) => {
+  res.json({
+    ok: true,
+    message: "Bearer token accepted.",
+    whatsapp: { connected: _isReady, qrAvailable: !!_qrDataUrl },
+  });
 });
 
 /**
@@ -214,13 +368,20 @@ app.get("/wa/health", (_req, res) => {
  * Returns current connection state and phone info.
  */
 app.get("/wa/status", requireAuth, (_req, res) => {
-  console.log(`[WA] /wa/status → connected=${_isReady}, qrAvailable=${!!_qrDataUrl}`);
+  const stallError = checkInitStall();
+  if (stallError && !_clientInitError) _clientInitError = stallError;
+
+  console.log(`[WA] /wa/status → connected=${_isReady}, qrAvailable=${!!_qrDataUrl}, initError=${!!_clientInitError}`);
   res.json({
     connected:    _isReady,
     qrAvailable:  !!_qrDataUrl,
     phone:        _phoneInfo,
     queueLength:  _queue.length,
     historyCount: _history.length,
+    initializing: _clientInitializing,
+    initError:    _clientInitError,
+    chromeDetected: !!CHROME_PATH,
+    waitSeconds:  _initStartedAt ? Math.floor((Date.now() - _initStartedAt) / 1000) : 0,
   });
 });
 
@@ -230,18 +391,41 @@ app.get("/wa/status", requireAuth, (_req, res) => {
  * Only available while not connected.
  */
 app.get("/wa/qr", requireAuth, (_req, res) => {
-  console.log(`[WA] /wa/qr hit — connected=${_isReady}, qrReady=${!!_qrDataUrl}`);
-  if (_isReady) {
-    console.log("[WA] /wa/qr → already connected, sending connected:true");
-    return res.status(200).json({ connected: true, qr: null });
-  }
-  if (!_qrDataUrl) {
-    console.log("[WA] /wa/qr → QR not yet generated (Puppeteer still initialising)");
-    return res.status(202).json({
+  // Detect stall and surface as initError (stops infinite frontend retry)
+  const stallError = checkInitStall();
+  if (stallError && !_clientInitError) _clientInitError = stallError;
+
+  if (_clientInitError) {
+    console.log(`[WA] /wa/qr → initError: ${_clientInitError.slice(0, 80)}…`);
+    return res.status(503).json({
       qrReady: false,
-      message: "QR not yet available. Puppeteer is still initialising — retry in 3 seconds.",
+      initError: _clientInitError,
+      message: "WhatsApp client failed to start. See initError for details.",
+      chromePath: CHROME_PATH || null,
     });
   }
+
+  if (_isReady) {
+    return res.status(200).json({ connected: true, qr: null });
+  }
+
+  if (!_qrDataUrl) {
+    const elapsed = _initStartedAt ? Math.floor((Date.now() - _initStartedAt) / 1000) : 0;
+    if (_qrWaitLogCount++ % 10 === 0) {
+      console.log(`[WA] /wa/qr → waiting for QR (${elapsed}s, initializing=${_clientInitializing})`);
+    }
+    return res.status(202).json({
+      qrReady: false,
+      initializing: _clientInitializing,
+      waitSeconds: elapsed,
+      maxWaitSeconds: INIT_TIMEOUT_MS / 1000,
+      chromeDetected: !!CHROME_PATH,
+      message: CHROME_PATH
+        ? `Waiting for QR code (${elapsed}s). Puppeteer is still starting…`
+        : `Chrome not detected. Run: npx puppeteer browsers install chrome`,
+    });
+  }
+
   console.log(`[WA] /wa/qr → sending QR (${_qrDataUrl.length} chars)`);
   res.json({ qrReady: true, qr: _qrDataUrl });
 });
@@ -312,6 +496,30 @@ app.get("/wa/messages", requireAuth, (req, res) => {
 });
 
 /**
+ * POST /wa/restart
+ * Retry WhatsApp client initialization after Puppeteer/Chrome failure.
+ */
+app.post("/wa/restart", requireAuth, async (_req, res) => {
+  if (_isReady) {
+    return res.json({ ok: true, message: "Already connected." });
+  }
+  console.log("[WA] /wa/restart — resetting client and re-initializing…");
+  try {
+    await resetAndInitClient();
+    res.json({
+      ok: !_clientInitError,
+      initError: _clientInitError,
+      chromePath: CHROME_PATH || null,
+      message: _clientInitError
+        ? "Init failed — see initError."
+        : "Initialization restarted. Wait for QR…",
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /wa/disconnect
  * Logs out the WhatsApp session and clears local auth data.
  */
@@ -327,13 +535,30 @@ app.post("/wa/disconnect", requireAuth, async (_req, res) => {
   }
 });
 
+// ── 404 + error handlers ──────────────────────────────────────────────────────
+app.use((req, res) => {
+  console.warn(`[HTTP] 404 ${req.method} ${req.path}`);
+  res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+});
+
+app.use((err, _req, res, _next) => {
+  console.error("[HTTP] Unhandled error:", err.message);
+  res.status(500).json({ error: err.message || "Internal server error" });
+});
+
 // ── Start Server ─────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n╔═══════════════════════════════════════════════╗`);
-  console.log(`║  FutureShield WhatsApp Server                 ║`);
-  console.log(`║  Listening on http://localhost:${PORT}           ║`);
-  console.log(`║  Auth token   : ${WA_SECRET.slice(0, 8)}…          ║`);
-  console.log(`╚═══════════════════════════════════════════════╝\n`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`\n╔═══════════════════════════════════════════════════════╗`);
+  console.log(`║  FutureShield WhatsApp Server                         ║`);
+  console.log(`║  Listening on http://localhost:${PORT}                     ║`);
+  console.log(`║  Health check : http://localhost:${PORT}/wa/health         ║`);
+  console.log(`║  Auth token   : ${WA_SECRET}  ║`);
+  console.log(`║  Chrome       : ${CHROME_PATH || "NOT FOUND — run npx puppeteer browsers install chrome"}  ║`);
+  console.log(`║  Init timeout : ${INIT_TIMEOUT_MS / 1000}s                                       ║`);
+  console.log(`║  Test script  : node scripts/test-wa-connection.js    ║`);
+  console.log(`╚═══════════════════════════════════════════════════════╝\n`);
+  // Start WhatsApp after HTTP server is up (failures won't crash the API)
+  initWhatsAppClient();
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
