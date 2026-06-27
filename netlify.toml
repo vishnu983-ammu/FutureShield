@@ -1,0 +1,39 @@
+[build]
+  publish = "."
+  command = ""
+
+# Serve APK files from public/downloads/ at /downloads/*
+[[redirects]]
+  from   = "/downloads/*"
+  to     = "/public/downloads/:splat"
+  status = 200
+
+# SPA fallback for all other routes
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/downloads/*"
+
+  [headers.values]
+    Content-Type        = "application/vnd.android.package-archive"
+    Content-Disposition = "attachment; filename=\"future-shield.apk\""
+    Cache-Control       = "public, max-age=3600"
+
+[[headers]]
+  for = "/*"
+
+  [headers.values]
+    X-Frame-Options        = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
+    Permissions-Policy     = "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:3001 http://localhost:3002 https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com wss://*.firebaseio.com; frame-src https://future-shield.firebaseapp.com;"
+
+[[headers]]
+  for = "/index.html"
+
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"

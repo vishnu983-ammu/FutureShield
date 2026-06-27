@@ -1,0 +1,11 @@
+{
+  "appId": "com.futureshield.app",
+  "appName": "FutureShield",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
