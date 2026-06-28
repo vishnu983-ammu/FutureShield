@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function managerCardFeatureOn(mgrId) {
+      let m = get(/databases/$(database)/documents/managers/$(mgrId)).data;
+      return m.digitalCardEnabled == true || m.feature_enabled == true;
+    }
+
+    match /whatsapp_sessions/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /system_settings/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /company_settings/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /advisors/{advisorId} {
+      allow read: if resource.data.cardEnabled == true
+                  && resource.data.disabled != true;
+      allow write: if true;
+
+      match /card_products/{productId} {
+        allow read: if get(/databases/$(database)/documents/advisors/$(advisorId)).data.cardEnabled == true
+                    && get(/databases/$(database)/documents/advisors/$(advisorId)).data.disabled != true;
+        allow write: if true;
+      }
+    }
+
+    match /managers/{managerId} {
+      allow read: if resource.data.disabled != true;
+      allow write: if true;
+
+      match /card_products/{productId} {
+        allow read: if get(/databases/$(database)/documents/managers/$(managerId)).data.cardEnabled == true
+                    && get(/databases/$(database)/documents/managers/$(managerId)).data.disabled != true
+                    && managerCardFeatureOn(managerId);
+        allow write: if true;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

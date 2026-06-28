@@ -1,11 +1,19 @@
 {
   "version": 2,
-  "buildCommand": null,
+  "buildCommand": "npm run build:css",
   "outputDirectory": ".",
   "routes": [
     {
       "src": "/downloads/(.*)",
       "dest": "/public/downloads/$1"
+    },
+    {
+      "src": "/card.html",
+      "dest": "/card.html"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "/assets/favicon.svg"
     },
     {
       "src": "/(.*)",
@@ -30,7 +38,7 @@
         { "key": "Permissions-Policy",      "value": "camera=(), microphone=(), geolocation=()" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:3001 http://localhost:3002 https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com wss://*.firebaseio.com; frame-src https://future-shield.firebaseapp.com;"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:3001 https://localhost:3001 http://localhost:3002 https://localhost:3002 https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com wss://*.firebaseio.com; frame-src https://future-shield.firebaseapp.com;"
         }
       ]
     },

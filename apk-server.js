@@ -71,19 +71,75 @@ const upload = multer({
   },
 });
 
-function getApkInfo() {
+function getApkInfo(req) {
+  const baseUrl = resolvePublicBaseUrl(req);
+  const relativeUrl = `/downloads/${APK_FILENAME}`;
   if (!fs.existsSync(APK_PATH)) {
-    return { exists: false, filename: APK_FILENAME, downloadUrl: `/downloads/${APK_FILENAME}` };
+    return {
+      exists: false,
+      filename: APK_FILENAME,
+      downloadUrl: relativeUrl,
+      absoluteDownloadUrl: baseUrl ? `${baseUrl}${relativeUrl}` : relativeUrl,
+    };
   }
   const stat = fs.statSync(APK_PATH);
   return {
     exists:      true,
     filename:    APK_FILENAME,
-    downloadUrl: `/downloads/${APK_FILENAME}`,
+    downloadUrl: relativeUrl,
+    absoluteDownloadUrl: baseUrl ? `${baseUrl}${relativeUrl}` : relativeUrl,
     sizeBytes:   stat.size,
     sizeMB:      (stat.size / (1024 * 1024)).toFixed(2),
     modifiedAt:  stat.mtime.toISOString(),
   };
+}
+
+function resolvePublicBaseUrl(req) {
+  if (!req) return "";
+  const proto = req.get("x-forwarded-proto") || req.protocol || "http";
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  return host ? `${proto}://${host}`.replace(/\/$/, "") : "";
+}
+
+function delaySync(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* spin */ }
+}
+
+/** Save APK bytes — direct overwrite + retries (OneDrive-safe on Windows). */
+function saveApkBuffer(buffer) {
+  const strategies = [
+    () => fs.writeFileSync(APK_PATH, buffer),
+    () => {
+      const tmpPath = `${APK_PATH}.${Date.now()}.tmp`;
+      fs.writeFileSync(tmpPath, buffer);
+      try {
+        fs.renameSync(tmpPath, APK_PATH);
+      } finally {
+        try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+      }
+    },
+  ];
+
+  let lastErr;
+  for (const strategy of strategies) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        strategy();
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (err.code !== "EBUSY" && err.code !== "EPERM") break;
+        delaySync(150 * (attempt + 1));
+      }
+    }
+  }
+  const hint = /OneDrive/i.test(DOWNLOADS_DIR)
+    ? " File may be locked by OneDrive — pause sync on public/downloads or move the project outside OneDrive."
+    : "";
+  const error = new Error((lastErr?.message || "Failed to save APK") + hint);
+  error.code = lastErr?.code;
+  throw error;
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -91,8 +147,8 @@ app.get("/api/apk/health", (_req, res) => {
   res.json({ ok: true, service: "futureshield-apk-server", port: PORT });
 });
 
-app.get("/api/apk/info", requireAuth, (_req, res) => {
-  res.json(getApkInfo());
+app.get("/api/apk/info", requireAuth, (req, res) => {
+  res.json(getApkInfo(req));
 });
 
 app.post("/api/apk/upload", requireAuth, (req, res) => {
@@ -107,16 +163,12 @@ app.post("/api/apk/upload", requireAuth, (req, res) => {
     }
 
     try {
-      const tmpPath = APK_PATH + ".tmp";
-      fs.writeFileSync(tmpPath, req.file.buffer);
-      // Atomic replace
-      if (fs.existsSync(APK_PATH)) fs.unlinkSync(APK_PATH);
-      fs.renameSync(tmpPath, APK_PATH);
+      saveApkBuffer(req.file.buffer);
       console.log(`[APK] Uploaded ${APK_FILENAME} (${req.file.size} bytes)`);
-      res.json({ success: true, message: "APK saved successfully.", ...getApkInfo() });
+      res.json({ success: true, message: "APK saved successfully.", ...getApkInfo(req) });
     } catch (writeErr) {
       console.error("[APK] Write error:", writeErr);
-      res.status(500).json({ error: "Failed to save APK to disk." });
+      res.status(500).json({ error: writeErr.message || "Failed to save APK to disk." });
     }
   });
 });

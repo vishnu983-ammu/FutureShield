@@ -1,60 +1,58 @@
 /**
- * FutureShield — WhatsApp Bulk Messaging Microservice
- * ====================================================
- * Stack : Node.js + Express + whatsapp-web.js
- * Auth  : Simple Bearer token (set WA_SECRET in environment or .env)
+ * FutureShield — WhatsApp Bulk Messaging Microservice (per-user sessions)
+ * ========================================================================
+ * Each dashboard user links their own WhatsApp via QR (X-User-Id header).
+ * Global WA_SECRET authenticates the app; sessions are isolated by user id.
  *
- * Endpoints:
- *   GET  /wa/status          → connection state + phone info
- *   GET  /wa/qr              → base64 QR code image (while not connected)
- *   POST /wa/send            → enqueue bulk messages
- *   GET  /wa/messages        → queue + history (last 500)
- *   POST /wa/disconnect      → log out WhatsApp session
- *   GET  /wa/health          → simple uptime check (no auth)
- *
- * Start:
- *   node whatsapp-server.js          (production)
- *   npx nodemon whatsapp-server.js   (development)
- *
- * Environment variables (optional — create a .env or set in your shell):
- *   PORT=3001
- *   WA_SECRET=change-me-to-a-strong-random-string
- *   COUNTRY_CODE=91          ← default country dialling code (India)
- *   MSG_DELAY_MIN=3000       ← min ms between messages (anti-ban)
- *   MSG_DELAY_MAX=6000       ← max ms between messages
+ * Endpoints (require Authorization + X-User-Id unless noted):
+ *   GET  /wa/health          → uptime (no user header)
+ *   GET  /wa/status          → per-user connection state
+ *   GET  /wa/qr              → per-user QR code
+ *   POST /wa/send            → enqueue messages for that user's session
+ *   POST /wa/upload          → upload attachment for that user
+ *   GET  /wa/messages        → per-user queue + history
+ *   POST /wa/restart         → retry Puppeteer init for that user
+ *   POST /wa/disconnect      → logout that user's WhatsApp session
  */
 
 "use strict";
 
-// ── Load .env if present ─────────────────────────────────────────────────────
-try { require("dotenv").config(); } catch (_) { /* dotenv is optional */ }
+try { require("dotenv").config(); } catch (_) {}
 
-const fs         = require("fs");
-const path       = require("path");
-const express    = require("express");
-const cors       = require("cors");
-const qrcode     = require("qrcode");
-const { Client, LocalAuth } = require("whatsapp-web.js");
+const fs      = require("fs");
+const path    = require("path");
+const http    = require("http");
+const https   = require("https");
+const { execSync } = require("child_process");
+const express = require("express");
+const cors    = require("cors");
+const qrcode  = require("qrcode");
+const multer  = require("multer");
+const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 
-// ── Configuration ─────────────────────────────────────────────────────────────
-const PORT         = parseInt(process.env.PORT        || "3001", 10);
-const WA_SECRET    = process.env.WA_SECRET            || "futureshield-wa-secret";
-const COUNTRY_CODE = process.env.COUNTRY_CODE         || "91";
-const DELAY_MIN    = parseInt(process.env.MSG_DELAY_MIN || "3000", 10);
-const DELAY_MAX    = parseInt(process.env.MSG_DELAY_MAX || "6000", 10);
-const INIT_TIMEOUT_MS = parseInt(process.env.WA_INIT_TIMEOUT || "90000", 10); // 90s max wait for QR
+const UPLOAD_ROOT = path.join(__dirname, "uploads", "wa");
+try { fs.mkdirSync(UPLOAD_ROOT, { recursive: true }); } catch (_) {}
 
-/** Locate Chrome/Chromium for Puppeteer (Windows-friendly) */
+const PORT            = parseInt(process.env.PORT || "3001", 10);
+const WA_SECRET       = process.env.WA_SECRET || "futureshield-wa-secret";
+const COUNTRY_CODE    = process.env.COUNTRY_CODE || "91";
+const DELAY_MIN       = parseInt(process.env.MSG_DELAY_MIN || "3000", 10);
+const DELAY_MAX       = parseInt(process.env.MSG_DELAY_MAX || "6000", 10);
+const INIT_TIMEOUT_MS = parseInt(process.env.WA_INIT_TIMEOUT || "90000", 10);
+const USE_HTTPS       = process.env.USE_HTTPS === "1" || process.env.USE_HTTPS === "true";
+const SSL_KEY_PATH    = process.env.SSL_KEY  || path.join(__dirname, "certs", "localhost-key.pem");
+const SSL_CERT_PATH   = process.env.SSL_CERT || path.join(__dirname, "certs", "localhost-cert.pem");
+const MAX_USER_SESSIONS = parseInt(process.env.WA_MAX_USER_SESSIONS || "20", 10);
+
+const ALLOWED_MIME = /^(image\/(jpeg|png|gif|webp)|video\/(mp4|3gpp|quicktime)|application\/pdf)/i;
+
 function findChromeExecutable() {
   const candidates = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
     process.env.CHROME_PATH,
-    process.env.GOOGLE_CHROME_SHIM,
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
     path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe"),
-    path.join(process.env.PROGRAMFILES || "", "Google", "Chrome", "Application", "chrome.exe"),
-    path.join(process.env["PROGRAMFILES(X86)"] || "", "Google", "Chrome", "Application", "chrome.exe"),
   ].filter(Boolean);
   for (const p of candidates) {
     try { if (fs.existsSync(p)) return p; } catch (_) {}
@@ -63,391 +61,538 @@ function findChromeExecutable() {
 }
 
 const CHROME_PATH = findChromeExecutable();
+const WWEBJS_CACHE_DIR = path.join(__dirname, ".wwebjs_cache");
+const WWEBJS_AUTH_DIR = path.join(__dirname, ".wwebjs_auth");
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let _qrDataUrl   = null;   // base64 PNG of current QR code
-let _isReady     = false;  // true when WhatsApp session is active
-let _phoneInfo   = null;   // { number, pushname } after connection
-let _isProcessing = false; // true while the queue worker is running
-let _clientInitError = null; // set if Puppeteer/Chrome fails to start
-let _clientInitializing = false;
-let _initStartedAt = null;   // when current init attempt began
-let _qrWaitLogCount = 0;     // throttle /wa/qr waiting logs
-
-/** @type {Array<MessageRecord>} */
-const _queue   = [];       // pending / sending
-/** @type {Array<MessageRecord>} */
-const _history = [];       // completed (sent / failed), capped at 500
+/** @type {Map<string, UserSession>} */
+const _sessions = new Map();
 
 /**
- * @typedef {Object} MessageRecord
- * @property {string} id
- * @property {string} phone
- * @property {string} name
- * @property {string} text
- * @property {"pending"|"sending"|"sent"|"failed"} status
- * @property {string} [error]
- * @property {string} createdAt
- * @property {string} [sentAt]
+ * @typedef {Object} UserSession
+ * @property {string} userId
+ * @property {import('whatsapp-web.js').Client|null} client
+ * @property {string|null} qrDataUrl
+ * @property {boolean} isReady
+ * @property {{ number: string, pushname: string }|null} phoneInfo
+ * @property {boolean} isProcessing
+ * @property {string|null} clientInitError
+ * @property {boolean} clientInitializing
+ * @property {boolean} clientInitialized
+ * @property {number|null} initStartedAt
+ * @property {number} qrWaitLogCount
+ * @property {Promise<void>|null} restartPromise
+ * @property {Promise<void>|null} initPromise
+ * @property {Array<object>} queue
+ * @property {Array<object>} history
  */
 
-// ── WhatsApp Client ───────────────────────────────────────────────────────────
-const client = new Client({
-  authStrategy: new LocalAuth({ clientId: "futureshield" }),
-  puppeteer: {
+function createUserSession(userId) {
+  return {
+    userId,
+    client: null,
+    qrDataUrl: null,
+    isReady: false,
+    phoneInfo: null,
+    isProcessing: false,
+    clientInitError: null,
+    clientInitializing: false,
+    clientInitialized: false,
+    initStartedAt: null,
+    qrWaitLogCount: 0,
+    restartPromise: null,
+    initPromise: null,
+    queue: [],
+    history: [],
+  };
+}
+
+function getUserSession(userId, create = true) {
+  if (!_sessions.has(userId)) {
+    if (!create) return null;
+    if (_sessions.size >= MAX_USER_SESSIONS) {
+      const err = new Error(`Maximum concurrent WhatsApp sessions (${MAX_USER_SESSIONS}) reached. Disconnect an unused session or restart the server.`);
+      err.code = "SESSION_LIMIT";
+      throw err;
+    }
+    _sessions.set(userId, createUserSession(userId));
+  }
+  return _sessions.get(userId);
+}
+
+function sanitizeUserId(raw) {
+  const id = String(raw || "").trim();
+  if (!/^[-_\w]{3,128}$/i.test(id)) return null;
+  return id;
+}
+
+function buildPuppeteerConfig() {
+  return {
     headless: true,
     ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}),
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--no-first-run",
-      "--no-zygote",
-      "--single-process",
       "--disable-gpu",
+      "--no-first-run",
+      "--disable-extensions",
     ],
-  },
-});
-
-client.on("qr", async (qr) => {
-  console.log("[WA] QR received — scan with WhatsApp to connect.");
-  _qrDataUrl = await qrcode.toDataURL(qr, { width: 256, margin: 2 });
-  _isReady   = false;
-  _phoneInfo = null;
-});
-
-client.on("ready", async () => {
-  _isReady   = true;
-  _qrDataUrl = null;
-  const info = client.info;
-  _phoneInfo = {
-    number:    info?.wid?.user   || "unknown",
-    pushname:  info?.pushname    || "WhatsApp",
   };
-  console.log(`[WA] Connected as ${_phoneInfo.pushname} (+${_phoneInfo.number})`);
-});
-
-client.on("authenticated", () => {
-  console.log("[WA] Session authenticated.");
-});
-
-client.on("auth_failure", (msg) => {
-  console.error("[WA] Auth failure:", msg);
-  _isReady   = false;
-  _qrDataUrl = null;
-});
-
-client.on("disconnected", (reason) => {
-  console.warn("[WA] Disconnected:", reason);
-  _isReady   = false;
-  _qrDataUrl = null;
-  _phoneInfo = null;
-  // Re-initialise so a new QR is generated for reconnection
-  setTimeout(() => initWhatsAppClient(), 3000);
-});
-
-/** Detect init stall (Puppeteer hung or Chrome missing) */
-function checkInitStall() {
-  if (_isReady || _qrDataUrl || _clientInitError) return null;
-  if (!_initStartedAt) return null;
-  const elapsed = Date.now() - _initStartedAt;
-  if (elapsed < INIT_TIMEOUT_MS) return null;
-
-  const chromeHint = CHROME_PATH
-    ? `Chrome found at ${CHROME_PATH} but WhatsApp did not start in ${INIT_TIMEOUT_MS / 1000}s.`
-    : "Google Chrome not found. Install Chrome or run: npx puppeteer browsers install chrome";
-
-  return `${chromeHint} Try: POST /wa/restart or restart npm start.`;
 }
 
-/** Start WhatsApp client without crashing the HTTP server on Puppeteer errors */
-async function initWhatsAppClient() {
-  if (_clientInitializing || _isReady) return;
-  _clientInitializing = true;
-  _clientInitError = null;
-  _initStartedAt = Date.now();
-  _qrWaitLogCount = 0;
+function userUploadDir(userId) {
+  const dir = path.join(UPLOAD_ROOT, userId);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
-  console.log("[WA] Initialising WhatsApp client (Puppeteer)…");
-  if (CHROME_PATH) {
-    console.log(`[WA] Using Chrome: ${CHROME_PATH}`);
-  } else {
-    console.warn("[WA] Chrome not found in standard paths.");
-    console.warn("[WA] Install: npx puppeteer browsers install chrome");
-    console.warn("[WA] Or set PUPPETEER_EXECUTABLE_PATH to your chrome.exe");
+function createWaUpload(userId) {
+  return multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, userUploadDir(userId)),
+      filename: (_req, file, cb) => {
+        const safe = `${Date.now()}-${(file.originalname || "file").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        cb(null, safe);
+      },
+    }),
+    limits: { fileSize: 16 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (ALLOWED_MIME.test(file.mimetype || "")) cb(null, true);
+      else cb(new Error("Only images, videos, and PDF files are allowed."));
+    },
+  });
+}
+
+function attachClientEvents(session, client) {
+  client.on("qr", async (qr) => {
+    console.log(`[WA:${session.userId}] QR received`);
+    session.qrDataUrl = await qrcode.toDataURL(qr, { width: 256, margin: 2 });
+    session.isReady = false;
+    session.phoneInfo = null;
+  });
+
+  client.on("ready", () => {
+    session.isReady = true;
+    session.qrDataUrl = null;
+    session.clientInitError = null;
+    const info = client.info;
+    session.phoneInfo = {
+      number: info?.wid?.user || "unknown",
+      pushname: info?.pushname || "WhatsApp",
+    };
+    console.log(`[WA:${session.userId}] Connected as ${session.phoneInfo.pushname} (+${session.phoneInfo.number})`);
+  });
+
+  client.on("authenticated", () => {
+    console.log(`[WA:${session.userId}] Session authenticated`);
+  });
+
+  client.on("auth_failure", (msg) => {
+    console.error(`[WA:${session.userId}] Auth failure:`, msg);
+    session.isReady = false;
+    session.qrDataUrl = null;
+  });
+
+  client.on("disconnected", (reason) => {
+    console.warn(`[WA:${session.userId}] Disconnected:`, reason);
+    session.isReady = false;
+    session.clientInitialized = false;
+    session.qrDataUrl = null;
+    session.phoneInfo = null;
+  });
+}
+
+function createWhatsAppClient(session) {
+  const client = new Client({
+    authStrategy: new LocalAuth({ clientId: session.userId }),
+    puppeteer: buildPuppeteerConfig(),
+  });
+  attachClientEvents(session, client);
+  return client;
+}
+
+function sessionAuthDir(userId) {
+  return path.join(WWEBJS_AUTH_DIR, `session-${userId}`);
+}
+
+function isClientAlive(session) {
+  try {
+    return !!(session.client?.pupBrowser?.isConnected?.());
+  } catch (_) {
+    return false;
   }
+}
+
+function killStaleBrowserForSession(userId) {
+  const marker = `session-${userId}`.replace(/'/g, "''");
+  if (process.platform === "win32") {
+    try {
+      execSync(
+        `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name = 'chrome.exe'\\" | Where-Object { $_.CommandLine -like '*${marker}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`,
+        { stdio: "ignore", timeout: 15000 }
+      );
+    } catch (_) {}
+  } else {
+    try {
+      execSync(`pkill -f "session-${userId}"`, { stdio: "ignore", timeout: 5000 });
+    } catch (_) {}
+  }
+
+  const lockFile = path.join(sessionAuthDir(userId), "SingletonLock");
+  try { if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile); } catch (_) {}
+}
+
+function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function destroyClientSafely(session) {
+  const client = session.client;
+  session.client = null;
+  session.clientInitialized = false;
+  if (!client) return;
+
+  try {
+    const browser = client.pupBrowser;
+    if (browser?.isConnected?.()) await browser.close();
+  } catch (err) {
+    console.warn(`[WA:${session.userId}] browser close:`, err.message);
+  }
+
+  try {
+    await client.destroy();
+  } catch (err) {
+    console.warn(`[WA:${session.userId}] client destroy:`, err.message);
+  }
+
+  killStaleBrowserForSession(session.userId);
+  await delay(1500);
+}
+
+function checkInitStall(session) {
+  if (session.isReady || session.qrDataUrl || session.clientInitError) return null;
+  if (!session.initStartedAt) return null;
+  const elapsed = Date.now() - session.initStartedAt;
+  if (elapsed < INIT_TIMEOUT_MS) return null;
+  return CHROME_PATH
+    ? `Chrome found but WhatsApp did not start in ${INIT_TIMEOUT_MS / 1000}s for user ${session.userId}. Try POST /wa/restart.`
+    : "Google Chrome not found. Install Chrome or run: npx puppeteer browsers install chrome";
+}
+
+async function runClientInitialize(session) {
+  if (session.clientInitializing || session.isReady || !session.client) return;
+  if (session.clientInitialized || isClientAlive(session)) return;
+
+  session.clientInitializing = true;
+  session.clientInitError = null;
+  session.initStartedAt = Date.now();
+  session.qrWaitLogCount = 0;
+
+  console.log(`[WA:${session.userId}] Initialising client…`);
 
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
-      reject(new Error(
-        `WhatsApp initialization timed out after ${INIT_TIMEOUT_MS / 1000}s. ` +
-        (CHROME_PATH
-          ? "Chrome is installed but Puppeteer hung — try POST /wa/restart."
-          : "Install Chrome: npx puppeteer browsers install chrome")
-      ));
+      reject(new Error(`Initialization timed out after ${INIT_TIMEOUT_MS / 1000}s.`));
     }, INIT_TIMEOUT_MS);
   });
 
   try {
-    await Promise.race([client.initialize(), timeoutPromise]);
-    console.log("[WA] Client initialize() completed — waiting for QR or session restore…");
+    await Promise.race([session.client.initialize(), timeoutPromise]);
+    session.clientInitialized = true;
+    console.log(`[WA:${session.userId}] initialize() completed`);
   } catch (err) {
-    _clientInitError = err.message || String(err);
-    console.error("[WA] Client init failed (HTTP server still running):", _clientInitError);
-    console.error("[WA] Fix: npx puppeteer browsers install chrome");
-    console.error("[WA] Retry: POST /wa/restart with Bearer token");
-    try { await client.destroy(); } catch (destroyErr) {
-      console.warn("[WA] destroy after failed init:", destroyErr.message);
+    session.clientInitError = err.message || String(err);
+    console.error(`[WA:${session.userId}] Init failed:`, session.clientInitError);
+    if (/already running/i.test(session.clientInitError)) {
+      killStaleBrowserForSession(session.userId);
+      await delay(1000);
     }
+    await destroyClientSafely(session);
   } finally {
-    _clientInitializing = false;
+    session.clientInitializing = false;
   }
 }
 
-async function resetAndInitClient() {
-  _clientInitializing = false;
-  _clientInitError = null;
-  _initStartedAt = null;
-  _qrDataUrl = null;
-  _isReady = false;
-  _phoneInfo = null;
-  try { await client.destroy(); } catch (_) {}
-  await new Promise(r => setTimeout(r, 1500));
-  await initWhatsAppClient();
+async function ensureUserClientStarted(session) {
+  if (session.restartPromise) await session.restartPromise;
+  if (session.isReady) return;
+  if (session.clientInitialized || isClientAlive(session)) return;
+  if (session.initPromise) return session.initPromise;
+
+  session.initPromise = (async () => {
+    if (session.isReady || session.clientInitializing || session.clientInitialized || isClientAlive(session)) return;
+    if (!session.client) session.client = createWhatsAppClient(session);
+    await runClientInitialize(session);
+  })().finally(() => {
+    session.initPromise = null;
+  });
+
+  return session.initPromise;
 }
 
-// ── Express App ───────────────────────────────────────────────────────────────
+async function resetAndInitClient(session, opts = {}) {
+  if (session.restartPromise) return session.restartPromise;
+
+  session.restartPromise = (async () => {
+    session.clientInitializing = false;
+    session.clientInitialized = false;
+    session.clientInitError = null;
+    session.initStartedAt = null;
+    session.qrDataUrl = null;
+    session.isReady = false;
+    session.phoneInfo = null;
+
+    console.log(`[WA:${session.userId}] Resetting client…`);
+    await destroyClientSafely(session);
+    killStaleBrowserForSession(session.userId);
+
+    if (opts.clearCache !== false && fs.existsSync(WWEBJS_CACHE_DIR)) {
+      try { fs.rmSync(WWEBJS_CACHE_DIR, { recursive: true, force: true, maxRetries: 2 }); } catch (_) {}
+    }
+
+    await delay(2000);
+    session.client = createWhatsAppClient(session);
+    await runClientInitialize(session);
+  })().finally(() => {
+    session.restartPromise = null;
+  });
+
+  return session.restartPromise;
+}
+
+function toWaId(rawPhone) {
+  let digits = String(rawPhone).replace(/\D/g, "");
+  if (digits.length === 10) digits = COUNTRY_CODE + digits;
+  return `${digits}@c.us`;
+}
+
+function randomDelay() {
+  return new Promise(r => setTimeout(r, DELAY_MIN + Math.floor(Math.random() * (DELAY_MAX - DELAY_MIN))));
+}
+
+async function processQueue(session) {
+  if (session.isProcessing) return;
+  session.isProcessing = true;
+
+  while (session.queue.length > 0) {
+    if (!session.isReady || !session.client) {
+      console.warn(`[WA:${session.userId}] Session disconnected while processing queue`);
+      break;
+    }
+
+    const msg = session.queue[0];
+    msg.status = "sending";
+
+    try {
+      const chatId = toWaId(msg.phone);
+      if (msg.mediaPath && fs.existsSync(msg.mediaPath)) {
+        const media = MessageMedia.fromFilePath(msg.mediaPath);
+        const caption = (msg.text || "").trim();
+        if (caption) await session.client.sendMessage(chatId, media, { caption });
+        else await session.client.sendMessage(chatId, media);
+      } else if ((msg.text || "").trim()) {
+        await session.client.sendMessage(chatId, msg.text);
+      } else {
+        throw new Error("Message has no text and no valid attachment.");
+      }
+      msg.status = "sent";
+      msg.sentAt = new Date().toISOString();
+      console.log(`[WA:${session.userId}] ✓ Sent to ${msg.phone}`);
+    } catch (err) {
+      msg.status = "failed";
+      msg.error = err.message || "Unknown error";
+      console.error(`[WA:${session.userId}] ✗ Failed for ${msg.phone}:`, err.message);
+    }
+
+    session.history.unshift(session.queue.shift());
+    if (session.history.length > 500) session.history.length = 500;
+
+    if (session.queue.length > 0) await randomDelay();
+  }
+
+  session.isProcessing = false;
+}
+
+function resolveSharedAttachment(userId, attachment) {
+  if (!attachment?.attachmentId) return null;
+  const stored = path.join(userUploadDir(userId), path.basename(String(attachment.attachmentId)));
+  if (!fs.existsSync(stored)) return null;
+  return {
+    mediaPath: stored,
+    mediaMimetype: attachment.mimetype || "",
+    mediaFilename: attachment.filename || path.basename(stored),
+  };
+}
+
+function sessionStatusPayload(session) {
+  const stallError = checkInitStall(session);
+  if (stallError && !session.clientInitError) session.clientInitError = stallError;
+  const alive = session.clientInitialized || isClientAlive(session);
+  const initError = alive && (session.qrDataUrl || session.isReady) ? null : session.clientInitError;
+  return {
+    userId: session.userId,
+    connected: session.isReady,
+    qrAvailable: !!session.qrDataUrl,
+    phone: session.phoneInfo,
+    queueLength: session.queue.length,
+    historyCount: session.history.length,
+    initializing: session.clientInitializing,
+    initError,
+    chromeDetected: !!CHROME_PATH,
+    waitSeconds: session.initStartedAt ? Math.floor((Date.now() - session.initStartedAt) / 1000) : 0,
+  };
+}
+
+// ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 
-// Explicit CORS — allows Authorization header from any origin (required for
-// browsers that send a preflight OPTIONS before authenticated GET/POST requests)
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  optionsSuccessStatus: 200,  // IE11 chokes on 204
+  allowedHeaders: ["Content-Type", "Authorization", "X-User-Id"],
+  optionsSuccessStatus: 200,
 }));
-app.options("*", cors());     // Pre-flight for all routes
+app.options("*", cors());
 app.use(express.json({ limit: "2mb" }));
 
-// ── Request logging (skip noisy health checks unless DEBUG=1) ─────────────────
 app.use((req, res, next) => {
   const start = Date.now();
   const isHealth = req.path === "/wa/health";
   res.on("finish", () => {
-    const ms = Date.now() - start;
     if (process.env.DEBUG === "1" || !isHealth || res.statusCode >= 400) {
-      const auth = req.headers.authorization ? "Bearer ***" : "none";
-      console.log(`[HTTP] ${req.method} ${req.path} → ${res.statusCode} (${ms}ms) auth=${auth}`);
+      const uid = req.headers["x-user-id"] || "-";
+      console.log(`[HTTP] ${req.method} ${req.path} → ${res.statusCode} (${Date.now() - start}ms) user=${uid}`);
     }
   });
   next();
 });
 
-// ── Auth Middleware ───────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
-  const authHeader = req.headers["authorization"] || "";
-  const hasBearer  = authHeader.startsWith("Bearer ");
-  const token      = hasBearer ? authHeader.slice(7) : "";
-
-  if (!hasBearer || !token) {
-    console.warn(`[AUTH] ${req.method} ${req.path} — rejected: missing Bearer token`);
-    return res.status(401).json({
-      error: "Unauthorized. Send header: Authorization: Bearer <WA_SECRET>",
-      code:  "MISSING_TOKEN",
-    });
+  const token = (req.headers.authorization || "").startsWith("Bearer ")
+    ? req.headers.authorization.slice(7) : "";
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized. Send Authorization: Bearer <WA_SECRET>", code: "MISSING_TOKEN" });
   }
-
   if (token !== WA_SECRET) {
-    console.warn(
-      `[AUTH] ${req.method} ${req.path} — rejected: token mismatch ` +
-      `(received ${token.length} chars, expected ${WA_SECRET.length} chars)`
-    );
-    return res.status(401).json({
-      error: "Unauthorized. Bearer token does not match WA_SECRET on the server.",
-      code:  "INVALID_TOKEN",
-      hint:  `Server expects token starting with "${WA_SECRET.slice(0, 8)}…"`,
-    });
+    return res.status(401).json({ error: "Bearer token does not match WA_SECRET.", code: "INVALID_TOKEN" });
   }
-
   next();
 }
 
-// ── Helper: normalise phone number → WhatsApp Chat ID ────────────────────────
-function toWaId(rawPhone) {
-  let digits = String(rawPhone).replace(/\D/g, "");
-  // If the number doesn't start with a country code, prepend COUNTRY_CODE
-  if (digits.length === 10) digits = COUNTRY_CODE + digits;
-  return `${digits}@c.us`;
-}
-
-// ── Helper: random delay (anti-spam) ─────────────────────────────────────────
-function randomDelay() {
-  const ms = DELAY_MIN + Math.floor(Math.random() * (DELAY_MAX - DELAY_MIN));
-  return new Promise(r => setTimeout(r, ms));
-}
-
-// ── Queue Worker ─────────────────────────────────────────────────────────────
-async function processQueue() {
-  if (_isProcessing) return;
-  _isProcessing = true;
-
-  console.log(`[WA] Queue worker started. ${_queue.length} message(s) to send.`);
-
-  while (_queue.length > 0) {
-    if (!_isReady) {
-      console.warn("[WA] Session disconnected while processing. Pausing queue.");
-      break;
-    }
-
-    const msg = _queue[0];
-    msg.status = "sending";
-
-    try {
-      const chatId = toWaId(msg.phone);
-      await client.sendMessage(chatId, msg.text);
-      msg.status = "sent";
-      msg.sentAt = new Date().toISOString();
-      console.log(`[WA] ✓ Sent to ${msg.phone} (${msg.name})`);
-    } catch (err) {
-      msg.status = "failed";
-      msg.error  = err.message || "Unknown error";
-      console.error(`[WA] ✗ Failed for ${msg.phone}:`, err.message);
-    }
-
-    // Move to history (cap at 500 entries)
-    _history.unshift(_queue.shift());
-    if (_history.length > 500) _history.length = 500;
-
-    // Anti-spam delay between messages
-    if (_queue.length > 0) await randomDelay();
+function requireUserId(req, res, next) {
+  const userId = sanitizeUserId(req.headers["x-user-id"] || req.query.userId);
+  if (!userId) {
+    return res.status(400).json({ error: "Missing or invalid X-User-Id header (3–128 chars, alphanumeric/_/-)." });
   }
-
-  _isProcessing = false;
-  console.log("[WA] Queue worker finished.");
+  try {
+    req.waUserId = userId;
+    req.waSession = getUserSession(userId);
+    next();
+  } catch (err) {
+    res.status(503).json({ error: err.message, code: err.code });
+  }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// ROUTES
-// ────────────────────────────────────────────────────────────────────────────
+let _serverProtocol = "http";
 
-/** Health check — no auth required (for uptime monitors + dashboard reachability test) */
 app.get("/wa/health", (_req, res) => {
   res.json({
     ok: true,
     service: "futureshield-whatsapp",
     port: PORT,
+    protocol: _serverProtocol,
+    multiUser: true,
+    activeSessions: _sessions.size,
     uptime: Math.floor(process.uptime()),
-    whatsapp: {
-      connected: _isReady,
-      qrAvailable: !!_qrDataUrl,
-      initializing: _clientInitializing,
-      initError: _clientInitError,
-    },
-    // Helps debug token mismatches without exposing the full secret
     expectedTokenPrefix: WA_SECRET.slice(0, 8),
     expectedTokenLength: WA_SECRET.length,
   });
 });
 
-/**
- * GET /wa/test-auth
- * Authenticated ping — use after /wa/health to verify Bearer token.
- */
-app.get("/wa/test-auth", requireAuth, (_req, res) => {
-  res.json({
-    ok: true,
-    message: "Bearer token accepted.",
-    whatsapp: { connected: _isReady, qrAvailable: !!_qrDataUrl },
-  });
+app.get("/wa/test-auth", requireAuth, (req, res) => {
+  res.json({ ok: true, message: "Bearer token accepted." });
 });
 
-/**
- * GET /wa/status
- * Returns current connection state and phone info.
- */
-app.get("/wa/status", requireAuth, (_req, res) => {
-  const stallError = checkInitStall();
-  if (stallError && !_clientInitError) _clientInitError = stallError;
-
-  console.log(`[WA] /wa/status → connected=${_isReady}, qrAvailable=${!!_qrDataUrl}, initError=${!!_clientInitError}`);
-  res.json({
-    connected:    _isReady,
-    qrAvailable:  !!_qrDataUrl,
-    phone:        _phoneInfo,
-    queueLength:  _queue.length,
-    historyCount: _history.length,
-    initializing: _clientInitializing,
-    initError:    _clientInitError,
-    chromeDetected: !!CHROME_PATH,
-    waitSeconds:  _initStartedAt ? Math.floor((Date.now() - _initStartedAt) / 1000) : 0,
-  });
+app.get("/wa/status", requireAuth, requireUserId, async (req, res) => {
+  const session = req.waSession;
+  try {
+    await ensureUserClientStarted(session);
+  } catch (err) {
+    session.clientInitError = err.message;
+  }
+  res.json(sessionStatusPayload(session));
 });
 
-/**
- * GET /wa/qr
- * Returns the current QR code as a base64 data URL.
- * Only available while not connected.
- */
-app.get("/wa/qr", requireAuth, (_req, res) => {
-  // Detect stall and surface as initError (stops infinite frontend retry)
-  const stallError = checkInitStall();
-  if (stallError && !_clientInitError) _clientInitError = stallError;
+app.get("/wa/qr", requireAuth, requireUserId, async (req, res) => {
+  const session = req.waSession;
+  try {
+    await ensureUserClientStarted(session);
+  } catch (err) {
+    return res.status(503).json({ qrReady: false, initError: err.message });
+  }
 
-  if (_clientInitError) {
-    console.log(`[WA] /wa/qr → initError: ${_clientInitError.slice(0, 80)}…`);
+  const alive = session.clientInitialized || isClientAlive(session);
+  const initError = alive && (session.qrDataUrl || session.isReady) ? null : session.clientInitError;
+  if (initError) {
     return res.status(503).json({
       qrReady: false,
-      initError: _clientInitError,
-      message: "WhatsApp client failed to start. See initError for details.",
+      initError,
+      message: "WhatsApp client failed to start.",
       chromePath: CHROME_PATH || null,
     });
   }
 
-  if (_isReady) {
-    return res.status(200).json({ connected: true, qr: null });
+  if (session.isReady) {
+    return res.json({ connected: true, qr: null, phone: session.phoneInfo });
   }
 
-  if (!_qrDataUrl) {
-    const elapsed = _initStartedAt ? Math.floor((Date.now() - _initStartedAt) / 1000) : 0;
-    if (_qrWaitLogCount++ % 10 === 0) {
-      console.log(`[WA] /wa/qr → waiting for QR (${elapsed}s, initializing=${_clientInitializing})`);
-    }
+  if (!session.qrDataUrl) {
+    const elapsed = session.initStartedAt ? Math.floor((Date.now() - session.initStartedAt) / 1000) : 0;
     return res.status(202).json({
       qrReady: false,
-      initializing: _clientInitializing,
+      initializing: session.clientInitializing,
       waitSeconds: elapsed,
       maxWaitSeconds: INIT_TIMEOUT_MS / 1000,
       chromeDetected: !!CHROME_PATH,
-      message: CHROME_PATH
-        ? `Waiting for QR code (${elapsed}s). Puppeteer is still starting…`
-        : `Chrome not detected. Run: npx puppeteer browsers install chrome`,
+      message: `Waiting for QR code (${elapsed}s)…`,
     });
   }
 
-  console.log(`[WA] /wa/qr → sending QR (${_qrDataUrl.length} chars)`);
-  res.json({ qrReady: true, qr: _qrDataUrl });
+  res.json({ qrReady: true, qr: session.qrDataUrl });
 });
 
-/**
- * POST /wa/send
- * Body: { messages: [{ phone, name, text }] }
- * Enqueues messages and returns immediately.
- */
-app.post("/wa/send", requireAuth, (req, res) => {
-  if (!_isReady) {
-    return res.status(400).json({ error: "WhatsApp is not connected. Scan the QR first." });
+app.post("/wa/upload", requireAuth, requireUserId, (req, res) => {
+  const upload = createWaUpload(req.waUserId).single("file");
+  upload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || "Upload failed." });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded. Use field name 'file'." });
+    res.json({
+      ok: true,
+      attachmentId: req.file.filename,
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+    });
+  });
+});
+
+app.post("/wa/send", requireAuth, requireUserId, (req, res) => {
+  const session = req.waSession;
+  if (!session.isReady) {
+    return res.status(400).json({ error: "Your WhatsApp is not connected. Scan the QR code first." });
   }
 
-  const { messages } = req.body;
-  if (!Array.isArray(messages) || messages.length === 0) {
+  const { messages, attachment } = req.body;
+  if (!Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ error: "Provide a non-empty 'messages' array." });
   }
+  if (messages.length > 500) {
+    return res.status(400).json({ error: "Maximum 500 messages per request." });
+  }
 
-  const MAX_BATCH = 500;
-  if (messages.length > MAX_BATCH) {
-    return res.status(400).json({ error: `Maximum ${MAX_BATCH} messages per request.` });
+  const sharedMedia = resolveSharedAttachment(req.waUserId, attachment);
+  if (attachment?.attachmentId && !sharedMedia) {
+    return res.status(400).json({ error: "Attachment not found. Upload the file again." });
   }
 
   const now = new Date().toISOString();
@@ -457,115 +602,141 @@ app.post("/wa/send", requireAuth, (req, res) => {
     const phone = String(m.phone || "").trim();
     const text  = String(m.text  || "").trim();
     const name  = String(m.name  || "Customer").trim();
-
-    if (!phone || !text) continue;
-
-    /** @type {MessageRecord} */
+    if (!phone) continue;
+    if (!text && !sharedMedia) continue;
     const record = {
-      id:        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      phone,
-      name,
-      text,
-      status:    "pending",
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      phone, name, text,
+      status: "pending",
       createdAt: now,
+      userId: req.waUserId,
+      ...(sharedMedia || {}),
     };
-
-    _queue.push(record);
+    session.queue.push(record);
     enqueued.push(record.id);
   }
 
-  res.json({ queued: enqueued.length, ids: enqueued });
+  if (!enqueued.length) {
+    return res.status(400).json({ error: "No valid messages (need phone + text or attachment)." });
+  }
 
-  // Start queue worker asynchronously (non-blocking)
-  processQueue().catch(err => console.error("[WA] Queue error:", err));
+  res.json({ queued: enqueued.length, ids: enqueued, hasAttachment: !!sharedMedia, userId: req.waUserId });
+  processQueue(session).catch(err => console.error(`[WA:${req.waUserId}] Queue error:`, err));
 });
 
-/**
- * GET /wa/messages?limit=100&offset=0
- * Returns queue (all pending/sending) and paginated history.
- */
-app.get("/wa/messages", requireAuth, (req, res) => {
-  const limit  = Math.min(parseInt(req.query.limit  || "100", 10), 500);
-  const offset = Math.max(parseInt(req.query.offset || "0",   10), 0);
-
+app.get("/wa/messages", requireAuth, requireUserId, (req, res) => {
+  const session = req.waSession;
+  const limit  = Math.min(parseInt(req.query.limit || "100", 10), 500);
+  const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
   res.json({
-    queue:   _queue,
-    history: _history.slice(offset, offset + limit),
-    total:   _history.length,
+    userId: req.waUserId,
+    queue: session.queue,
+    history: session.history.slice(offset, offset + limit),
+    total: session.history.length,
   });
 });
 
-/**
- * POST /wa/restart
- * Retry WhatsApp client initialization after Puppeteer/Chrome failure.
- */
-app.post("/wa/restart", requireAuth, async (_req, res) => {
-  if (_isReady) {
+app.post("/wa/restart", requireAuth, requireUserId, async (req, res) => {
+  const session = req.waSession;
+  if (session.isReady) {
     return res.json({ ok: true, message: "Already connected." });
   }
-  console.log("[WA] /wa/restart — resetting client and re-initializing…");
   try {
-    await resetAndInitClient();
+    await resetAndInitClient(session, { clearCache: req.body?.clearCache !== false });
     res.json({
-      ok: !_clientInitError,
-      initError: _clientInitError,
-      chromePath: CHROME_PATH || null,
-      message: _clientInitError
-        ? "Init failed — see initError."
-        : "Initialization restarted. Wait for QR…",
+      ok: !session.clientInitError,
+      initError: session.clientInitError,
+      message: session.clientInitError ? "Init failed — see initError." : "Initialization restarted. Wait for QR…",
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-/**
- * POST /wa/disconnect
- * Logs out the WhatsApp session and clears local auth data.
- */
-app.post("/wa/disconnect", requireAuth, async (_req, res) => {
+app.post("/wa/disconnect", requireAuth, requireUserId, async (req, res) => {
+  const session = req.waSession;
   try {
-    await client.logout();
-    _isReady   = false;
-    _qrDataUrl = null;
-    _phoneInfo = null;
-    res.json({ ok: true, message: "Logged out. Scan QR to reconnect." });
+    if (session.initPromise) await session.initPromise.catch(() => {});
+    if (session.client && session.isReady) {
+      try {
+        await session.client.logout();
+      } catch (logoutErr) {
+        console.warn(`[WA:${session.userId}] logout failed (${logoutErr.message}), destroying client…`);
+        await destroyClientSafely(session);
+      }
+    } else {
+      await destroyClientSafely(session);
+    }
+    session.isReady = false;
+    session.qrDataUrl = null;
+    session.phoneInfo = null;
+    session.clientInitError = null;
+    res.json({ ok: true, message: "Logged out. Scan QR to reconnect.", userId: req.waUserId });
   } catch (err) {
+    await destroyClientSafely(session).catch(() => {});
+    session.isReady = false;
+    session.qrDataUrl = null;
+    session.phoneInfo = null;
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── 404 + error handlers ──────────────────────────────────────────────────────
 app.use((req, res) => {
-  console.warn(`[HTTP] 404 ${req.method} ${req.path}`);
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
 });
 
 app.use((err, _req, res, _next) => {
+  if (err instanceof multer.MulterError) {
+    const msg = err.code === "LIMIT_FILE_SIZE" ? "File too large (max 16 MB)." : err.message;
+    return res.status(400).json({ error: msg });
+  }
   console.error("[HTTP] Unhandled error:", err.message);
   res.status(500).json({ error: err.message || "Internal server error" });
 });
 
-// ── Start Server ─────────────────────────────────────────────────────────────
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`\n╔═══════════════════════════════════════════════════════╗`);
-  console.log(`║  FutureShield WhatsApp Server                         ║`);
-  console.log(`║  Listening on http://localhost:${PORT}                     ║`);
-  console.log(`║  Health check : http://localhost:${PORT}/wa/health         ║`);
-  console.log(`║  Auth token   : ${WA_SECRET}  ║`);
-  console.log(`║  Chrome       : ${CHROME_PATH || "NOT FOUND — run npx puppeteer browsers install chrome"}  ║`);
-  console.log(`║  Init timeout : ${INIT_TIMEOUT_MS / 1000}s                                       ║`);
-  console.log(`║  Test script  : node scripts/test-wa-connection.js    ║`);
-  console.log(`╚═══════════════════════════════════════════════════════╝\n`);
-  // Start WhatsApp after HTTP server is up (failures won't crash the API)
-  initWhatsAppClient();
-});
+function resolveTlsCredentials() {
+  const keyExists  = fs.existsSync(SSL_KEY_PATH);
+  const certExists = fs.existsSync(SSL_CERT_PATH);
+  if (USE_HTTPS && (!keyExists || !certExists)) {
+    console.error("[TLS] USE_HTTPS set but certs missing. Run: npm run generate:certs");
+    process.exit(1);
+  }
+  if (keyExists && certExists) {
+    return { key: fs.readFileSync(SSL_KEY_PATH), cert: fs.readFileSync(SSL_CERT_PATH) };
+  }
+  return null;
+}
 
-// ── Graceful shutdown ─────────────────────────────────────────────────────────
+function startHttpServer() {
+  const tls = resolveTlsCredentials();
+  _serverProtocol = tls ? "https" : "http";
+  const server = tls ? https.createServer(tls, app) : http.createServer(app);
+
+  server.listen(PORT, "0.0.0.0", () => {
+    const base = `${_serverProtocol}://localhost:${PORT}`;
+    console.log(`\n╔═══════════════════════════════════════════════════════╗`);
+    console.log(`║  FutureShield WhatsApp Server (per-user sessions)     ║`);
+    console.log(`║  Listening on ${base.padEnd(37)}║`);
+    console.log(`║  Health: ${base}/wa/health`.padEnd(56) + `║`);
+    console.log(`║  Header: X-User-Id required on session routes         ║`);
+    console.log(`╚═══════════════════════════════════════════════════════╝\n`);
+  });
+
+  return server;
+}
+
+startHttpServer();
+
 async function shutdown() {
-  console.log("\n[WA] Shutting down…");
-  try { await client.destroy(); } catch (_) {}
+  console.log("\n[WA] Shutting down all sessions…");
+  for (const session of _sessions.values()) {
+    await destroyClientSafely(session).catch(() => {});
+  }
   process.exit(0);
 }
-process.on("SIGINT",  shutdown);
+process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+process.on("unhandledRejection", (reason) => {
+  const msg = reason?.message || String(reason);
+  console.error("[WA] Unhandled rejection (server stays up):", msg);
+});

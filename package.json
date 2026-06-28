@@ -6,22 +6,31 @@
   "scripts": {
     "start": "node whatsapp-server.js",
     "start:wa": "node whatsapp-server.js",
+    "start:https": "node scripts/start-wa-https.js",
+    "generate:certs": "node scripts/generate-ssl-certs.js",
     "start:apk": "node apk-server.js",
     "dev": "nodemon whatsapp-server.js",
     "dev:apk": "nodemon apk-server.js",
-    "setup:mobile": "cd mobile && npm install && npx cap add android",
+    "setup:mobile": "node scripts/setup-mobile.js",
+    "build:css": "tailwindcss -i ./src/tailwind-input.css -o ./assets/css/tailwind.css --minify",
+    "build:css:watch": "tailwindcss -i ./src/tailwind-input.css -o ./assets/css/tailwind.css --watch",
+    "serve": "node scripts/dev-web-server.js",
+    "prebuild:apk": "npm run build:css",
     "build:apk": "node scripts/build-apk.js",
-    "test:wa": "node scripts/test-wa-connection.js"
+    "test:wa": "node scripts/test-wa-connection.js",
+    "renewal:cron": "node scripts/renewal-notification-cron.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.3",
+    "firebase-admin": "^13.10.0",
     "multer": "^1.4.5-lts.1",
     "qrcode": "^1.5.3",
     "whatsapp-web.js": "^1.23.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.3"
+    "nodemon": "^3.0.3",
+    "tailwindcss": "^3.4.17"
   },
   "engines": {
     "node": ">=18.0.0"

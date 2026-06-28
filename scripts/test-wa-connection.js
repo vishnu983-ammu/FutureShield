@@ -18,6 +18,7 @@
 const BASE_URL = getArg("--url") || process.env.WA_URL || "http://localhost:3001";
 const TOKEN    = getArg("--token") || process.env.WA_SECRET || "futureshield-wa-secret";
 const TIMEOUT  = 8000;
+const INSECURE = process.env.WA_INSECURE_TLS === "1" || process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0";
 
 function getArg(flag) {
   const i = process.argv.indexOf(flag);
@@ -36,8 +37,13 @@ async function fetchJson(path, options = {}) {
   const url = `${BASE_URL.replace(/\/$/, "")}${path}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+  const fetchOpts = { ...options, signal: ctrl.signal };
+  if (BASE_URL.startsWith("https://") && INSECURE) {
+    const https = require("https");
+    fetchOpts.agent = new https.Agent({ rejectUnauthorized: false });
+  }
   try {
-    const res = await fetch(url, { ...options, signal: ctrl.signal });
+    const res = await fetch(url, fetchOpts);
     let body = null;
     const text = await res.text();
     try { body = text ? JSON.parse(text) : null; } catch { body = { raw: text }; }

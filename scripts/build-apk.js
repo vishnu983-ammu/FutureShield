@@ -29,7 +29,20 @@ const WWW      = path.join(MOBILE, "www");
 const ANDROID  = path.join(MOBILE, "android");
 const OUT_DIR  = path.join(ROOT, "public", "downloads");
 const OUT_FILE = path.join(OUT_DIR, "future-shield.apk");
-const SRC_HTML = path.join(ROOT, "index.html");
+const SRC_HTML   = path.join(ROOT, "index.html");
+const SRC_ASSETS = path.join(ROOT, "assets");
+const { ensureAndroidSdk } = require("./ensure-android-sdk");
+
+function copyDirRecursive(src, dest) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) copyDirRecursive(from, to);
+    else fs.copyFileSync(from, to);
+  }
+}
 
 function run(cmd, cwd, label) {
   console.log(`\n▶ ${label || cmd}`);
@@ -50,7 +63,11 @@ function copyWebAssets() {
   }
   fs.mkdirSync(WWW, { recursive: true });
   fs.copyFileSync(SRC_HTML, path.join(WWW, "index.html"));
+  copyDirRecursive(SRC_ASSETS, path.join(WWW, "assets"));
   console.log("✓ Copied index.html → mobile/www/");
+  if (fs.existsSync(SRC_ASSETS)) {
+    console.log("✓ Copied assets/ → mobile/www/assets/");
+  }
 }
 
 function ensureAndroidPlatform() {
@@ -89,6 +106,8 @@ function main() {
     console.error("ERROR: Gradle wrapper not found. Run: npm run setup:mobile");
     process.exit(1);
   }
+
+  ensureAndroidSdk(ANDROID);
 
   // Debug build — no signing keystore required
   run(`${gradlew} assembleDebug`, ANDROID, "Building Android APK (debug)");
