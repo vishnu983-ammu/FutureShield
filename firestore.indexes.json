@@ -29,6 +29,41 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "approvalStatus", "order": "ASCENDING" },
+        { "fieldPath": "approvedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "closed_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalStatus", "order": "ASCENDING" },
+        { "fieldPath": "managerId", "order": "ASCENDING" },
+        { "fieldPath": "approvedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "closed_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalStatus", "order": "ASCENDING" },
+        { "fieldPath": "commissionMonthKey", "order": "ASCENDING" },
+        { "fieldPath": "managerId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "closed_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalStatus", "order": "ASCENDING" },
+        { "fieldPath": "commissionMonthKey", "order": "ASCENDING" },
+        { "fieldPath": "advisorId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "closed_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalStatus", "order": "ASCENDING" },
         { "fieldPath": "renewalNotificationSent", "order": "ASCENDING" },
         { "fieldPath": "renewalNotifyDateKey", "order": "ASCENDING" }
       ]

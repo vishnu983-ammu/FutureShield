@@ -12,15 +12,16 @@
   <meta property="og:type" content="website" />
   <title>Admin Dashboard – FutureShield</title>
 
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
-  <link rel="alternate icon" href="assets/favicon.svg" />
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="/assets/favicon.svg" />
 
   <!-- Tailwind CSS (production build — npm run build:css) -->
-  <link rel="stylesheet" href="assets/css/tailwind.css" />
+  <link rel="stylesheet" href="/assets/css/tailwind.css" />
 
   <!-- Chart.js — lightweight canvas charting library -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="scripts/sales-forecast.js"></script>
+  <script src="/scripts/sales-forecast.js"></script>
+  <script src="/scripts/commission-engine.js"></script>
 
   <!-- jsPDF + AutoTable — client-side PDF generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1743,7 +1744,7 @@
       </a>
 
       <!-- Financial Performance -->
-      <a href="#" id="nav-performance" data-label="Performance"
+      <a href="/performance" id="nav-performance" data-label="Performance"
         onclick="showSection('performance'); return false;"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
@@ -1756,8 +1757,22 @@
         <span class="nav-label">Performance</span>
       </a>
 
+      <!-- Commission Dashboard (Admin + Manager) -->
+      <a href="/commissions/report" id="nav-commission-report" data-label="Commission Report"
+        onclick="showSection('commission-report'); return false;"
+        class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
+               hover:bg-slate-700 hover:text-white text-sm transition-colors">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/>
+        </svg>
+        <span class="nav-label">Commissions</span>
+      </a>
+
       <!-- Closed Sales -->
-      <a href="#" id="nav-closedsales" data-label="Closed Sales"
+      <a href="/closedsales" id="nav-closedsales" data-label="Closed Sales"
         onclick="showSection('closedsales'); return false;"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
@@ -2272,8 +2287,9 @@
             </div>
 
             <!-- Total Commission Paid card -->
-            <div id="dash-card-commission" class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
-                        hover:shadow-md hover:border-violet-200 transition-all">
+            <div id="dash-card-commission" onclick="window.navigateToCommissions && window.navigateToCommissions()"
+              class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
+                        hover:shadow-md hover:border-violet-200 transition-all cursor-pointer group">
               <div class="w-14 h-14 rounded-xl bg-violet-50 flex items-center justify-center">
                 <svg class="w-7 h-7 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -4310,6 +4326,160 @@
 
       </div>
       <!-- END SECTION: API SETTINGS -->
+
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: COMMISSION REPORT (/commissions/report)
+           Full-page commission reporting with month-range filters.
+      ═══════════════════════════════════════════════ -->
+      <div id="section-commission-report" class="dash-section">
+
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Total Commission Report</h2>
+            <p id="comms-period-label" class="text-sm text-gray-500 mt-0.5">Select a month range and filters, then apply</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" onclick="window.exportCommissionReportCsv()"
+              class="text-xs font-medium px-3 py-2 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors">
+              Export CSV
+            </button>
+            <button type="button" onclick="window.refreshCommissionsPage()"
+              class="text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 bg-gray-50/60">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Filters</h3>
+          </div>
+          <div class="px-5 py-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+
+            <!-- From month-year -->
+            <div class="space-y-2">
+              <p class="text-xs font-medium text-gray-600">From</p>
+              <div class="grid grid-cols-2 gap-2">
+                <select id="comms-from-month" onchange="window.onCommissionsFilterChange()"
+                  class="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"></select>
+                <select id="comms-from-year" onchange="window.onCommissionsFilterChange()"
+                  class="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"></select>
+              </div>
+            </div>
+
+            <!-- To month-year -->
+            <div class="space-y-2">
+              <p class="text-xs font-medium text-gray-600">To</p>
+              <div class="grid grid-cols-2 gap-2">
+                <select id="comms-to-month" onchange="window.onCommissionsFilterChange()"
+                  class="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"></select>
+                <select id="comms-to-year" onchange="window.onCommissionsFilterChange()"
+                  class="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"></select>
+              </div>
+            </div>
+
+            <!-- Role -->
+            <div class="space-y-2" id="comms-role-wrap">
+              <label for="comms-role" class="text-xs font-medium text-gray-600">Role</label>
+              <select id="comms-role" onchange="window.onCommissionsFilterChange()"
+                class="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                <option value="manager">Manager</option>
+                <option value="advisor">Advisor</option>
+                <option value="all">All (Consolidated)</option>
+              </select>
+            </div>
+
+            <!-- View mode -->
+            <div class="space-y-2" id="comms-view-wrap">
+              <label for="comms-view-mode" class="text-xs font-medium text-gray-600">Report view</label>
+              <select id="comms-view-mode" onchange="window.onCommissionsFilterChange()"
+                class="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"></select>
+            </div>
+
+            <!-- Manager -->
+            <div class="space-y-2 hidden" id="comms-manager-wrap">
+              <label for="comms-manager" class="text-xs font-medium text-gray-600">Manager</label>
+              <select id="comms-manager" onchange="window.onCommissionsFilterChange()"
+                class="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                <option value="">All Managers</option>
+              </select>
+            </div>
+
+            <!-- Advisor -->
+            <div class="space-y-2 hidden" id="comms-advisor-wrap">
+              <label for="comms-advisor" class="text-xs font-medium text-gray-600">Advisor</label>
+              <select id="comms-advisor" onchange="window.onCommissionsFilterChange()"
+                class="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                <option value="">All Advisors</option>
+              </select>
+            </div>
+
+            <div class="md:col-span-2 xl:col-span-3 flex flex-wrap items-center gap-3 pt-1 border-t border-gray-100 mt-2 pt-4">
+              <button type="button" onclick="window.applyCommissionsFilters()"
+                class="text-sm font-medium px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors">
+                Apply filters
+              </button>
+              <p id="comms-date-hint" class="text-xs text-red-500 hidden">From month must be the same as or before To month.</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Total Commission</p>
+            <p id="comms-summary-total" class="text-2xl font-bold text-violet-700 mt-1">₹ —</p>
+          </div>
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Advisor Incentives</p>
+            <p id="comms-summary-advisor" class="text-2xl font-bold text-sky-700 mt-1">₹ —</p>
+          </div>
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Manager Incentives</p>
+            <p id="comms-summary-manager" class="text-2xl font-bold text-purple-700 mt-1">₹ —</p>
+          </div>
+        </div>
+
+        <div id="comms-error" class="hidden mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"></div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h3 id="comms-table-title" class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Commission breakdown</h3>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-gray-50 border-b border-gray-100">
+                  <th id="comms-th-type" class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden">Type</th>
+                  <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Name</th>
+                  <th id="comms-th-sales" class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Sales Amount</th>
+                  <th id="comms-th-advisor" class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Advisor Incentive</th>
+                  <th id="comms-th-manager" class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Mgr Incentive</th>
+                  <th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Total</th>
+                </tr>
+              </thead>
+              <tbody id="comms-table-body">
+                <tr><td colspan="5" class="text-center py-12 text-gray-400 text-sm">Apply filters to load commission data</td></tr>
+              </tbody>
+              <tfoot id="comms-table-foot" class="hidden bg-violet-50 border-t border-violet-100">
+                <tr>
+                  <td class="px-4 py-3 font-semibold text-violet-900">Team total</td>
+                  <td class="px-4 py-3 text-right font-medium text-violet-800" id="comms-foot-sales">—</td>
+                  <td class="px-4 py-3 text-right font-medium text-violet-800" id="comms-foot-advisor">—</td>
+                  <td class="px-4 py-3 text-right font-medium text-violet-800" id="comms-foot-manager">—</td>
+                  <td class="px-4 py-3 text-right font-bold text-violet-900" id="comms-foot-total">—</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+      </div>
+      <!-- END SECTION: COMMISSION DASHBOARD -->
 
 
       <!-- ═══════════════════════════════════════════════
@@ -9076,7 +9246,16 @@
       }
 
       const salesScoped = window.getScopedClosedSales();
-      const approvedSales = salesScoped.filter(s => s.approvalStatus === "approved");
+      const periodKey = window._commissionFilterState?.fromDate;
+      const toKey = window._commissionFilterState?.toDate || periodKey;
+      const periodSales = typeof window.getCommissionPeriodFilteredSales === "function"
+        ? window.getCommissionPeriodFilteredSales(periodKey, toKey)
+        : salesScoped.filter(s => s.approvalStatus === "approved");
+      const approvedSales = periodSales.filter(s => s.approvalStatus === "approved");
+      const engine = window.CommissionEngine;
+      const periodLabel = engine?.resolveMonthRange && periodKey
+        ? engine.resolveMonthRange(periodKey, toKey).label
+        : "Current month";
       const approvedPremium = approvedSales.reduce((a, s) => a + (Number(s.premiumAmount) || 0), 0);
       const commFn = typeof window.getSaleCommissionValues === "function"
         ? window.getSaleCommissionValues
@@ -9127,6 +9306,12 @@
 
       if (el("count-commission-total")) {
         el("count-commission-total").textContent = fmtMoney(isManager ? mgrCommission : totalCommission);
+      }
+      const commSub = el("dash-commission-sub");
+      if (commSub) {
+        commSub.textContent = isManager
+          ? `Direct + override · ${periodLabel}`
+          : `Advisor + Manager · ${periodLabel}`;
       }
 
       const leadPendingAll = window._pendingLeadApprovalsCache || [];
@@ -13534,6 +13719,7 @@
           renewalNotifyDateKey: renewalFields.renewalNotifyDateKey,
           renewalNotificationSent: false,
           renewalNotificationSentAt: null,
+          commissionMonthKey: `${approvedAtClient.getFullYear()}-${String(approvedAtClient.getMonth() + 1).padStart(2, "0")}`,
         };
 
         await updateDoc(saleRef, approvalPatch);
@@ -13558,6 +13744,7 @@
           renewalNotificationSent: false,
           _commissionPersisted: !!(comm.advisorCommission || comm.managerCommission),
           _commissionHydrated: !!(comm.advisorCommission || comm.managerCommission),
+          commissionMonthKey: `${approvedAtClient.getFullYear()}-${String(approvedAtClient.getMonth() + 1).padStart(2, "0")}`,
         });
 
         if (typeof window.updatePerformanceTiles === "function") {
@@ -13871,6 +14058,9 @@
           if (typeof window.updatePerformanceTiles === "function") {
             window.updatePerformanceTiles();
           }
+          if (typeof window.refreshCommissionsPage === "function") {
+            window.refreshCommissionsPage();
+          }
         } else if (typeof window.refreshCommissionDashboard === "function") {
           await window.refreshCommissionDashboard();
         } else {
@@ -14051,6 +14241,13 @@
           window.updatePerformanceTiles();
         }
 
+        if (typeof window.initCommissionsPage === "function") {
+          window.initCommissionsPage();
+        }
+        if (typeof window.refreshCommissionsPage === "function") {
+          await window.refreshCommissionsPage();
+        }
+
         if (window._session?.role === "admin") {
           await maybeBackfillCommissionsOnce();
         }
@@ -14136,6 +14333,618 @@
         window._commissionBackfillRan = false;
       }
     }
+
+    // ╔══════════════════════════════════════════════════════════════════════╗
+    // ║  COMMISSION REPORT — /commissions/report                            ║
+    // ╚══════════════════════════════════════════════════════════════════════╝
+
+    window._commissionFilterState = (() => {
+      const engine = window.CommissionEngine;
+      const def = engine?.defaultMonthRange ? engine.defaultMonthRange() : { fromDate: "2026-06", toDate: "2026-06" };
+      return {
+        fromDate: def.fromDate || def.fromMonth,
+        toDate: def.toDate || def.toMonth,
+        role: "manager",
+        viewMode: "all_managers",
+        managerId: "",
+        advisorId: "",
+      };
+    })();
+    window._lastCommissionReport = null;
+
+    const COMM_VIEW_OPTIONS = {
+      all: [
+        { id: "all_combined", label: "All managers & advisors (consolidated)" },
+      ],
+      manager: [
+        { id: "all_managers", label: "All Managers" },
+        { id: "manager_individual", label: "Individual Manager only" },
+        { id: "manager_team", label: "Manager + Team (aggregated)" },
+      ],
+      advisor: [
+        { id: "all_advisors", label: "All Advisors" },
+        { id: "advisor_individual", label: "Individual Advisor only" },
+      ],
+    };
+
+    function commValidateDateRange(fromDate, toDate) {
+      const from = commParseMonthKey(fromDate);
+      const to = commParseMonthKey(toDate);
+      if (!from || !to) return { ok: false, error: "Invalid month selection." };
+      if (from.key > to.key) {
+        return { ok: false, error: "From month must be the same as or before To month." };
+      }
+      return { ok: true };
+    }
+
+    function commReadFilterStateFromUI() {
+      const session = window._session || {};
+      const isManager = session.role === "manager";
+      const fromM = parseInt(document.getElementById("comms-from-month")?.value || "1", 10);
+      const fromY = parseInt(document.getElementById("comms-from-year")?.value || String(new Date().getFullYear()), 10);
+      const toM = parseInt(document.getElementById("comms-to-month")?.value || "1", 10);
+      const toY = parseInt(document.getElementById("comms-to-year")?.value || String(new Date().getFullYear()), 10);
+      const role = isManager ? "manager" : (document.getElementById("comms-role")?.value || "manager");
+      const managerId = document.getElementById("comms-manager")?.value || "";
+      const advisorId = document.getElementById("comms-advisor")?.value || "";
+      let viewMode = document.getElementById("comms-view-mode")?.value || "all_managers";
+      if (role === "all") {
+        viewMode = "all_combined";
+      } else if (role === "advisor") {
+        viewMode = advisorId ? "advisor_individual" : "all_advisors";
+      }
+      return {
+        fromDate: commMonthKeyFromParts(fromM, fromY),
+        toDate: commMonthKeyFromParts(toM, toY),
+        role,
+        viewMode,
+        managerId,
+        advisorId,
+      };
+    }
+
+    function commFmtMoney(n) {
+      return "₹ " + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+    }
+
+    function commGetEngine() {
+      return window.CommissionEngine || null;
+    }
+
+    function commGetApiConfig() {
+      const url = (localStorage.getItem("fs_commission_api_url") || "http://localhost:3003").replace(/\/$/, "");
+      const secret = localStorage.getItem("fs_commission_secret") || "futureshield-commission-secret";
+      return { url, secret };
+    }
+
+    function commMonthKeyFromParts(month, year) {
+      return `${year}-${String(month).padStart(2, "0")}`;
+    }
+
+    function commParseMonthKey(key) {
+      const engine = commGetEngine();
+      if (engine?.parseMonthKey) return engine.parseMonthKey(key);
+      const m = String(key || "").match(/^(\d{4})-(\d{2})$/);
+      return m ? { year: +m[1], month: +m[2], key } : null;
+    }
+
+    function commGetReportOptions() {
+      const session = window._session || {};
+      const st = window._commissionFilterState || {};
+      const isManager = session.role === "manager";
+      let viewMode = st.viewMode || "all_managers";
+      let role = st.role || "manager";
+      let managerId = st.managerId || null;
+      let advisorId = st.advisorId || null;
+
+      if (isManager) {
+        role = st.role === "advisor" ? "advisor" : "manager";
+        managerId = session.managerId;
+        if (role === "manager" && (viewMode === "all_managers" || viewMode === "all_combined")) {
+          viewMode = "manager_team";
+        }
+      }
+      if (role === "all") {
+        viewMode = "all_combined";
+      } else if (role === "advisor") {
+        viewMode = advisorId ? "advisor_individual" : "all_advisors";
+      }
+
+      return {
+        fromDate: st.fromDate,
+        toDate: st.toDate,
+        role,
+        viewMode,
+        managerId: managerId || null,
+        advisorId: advisorId || null,
+        sessionRole: isManager ? "manager" : "admin",
+        sessionManagerId: session.managerId || null,
+        now: new Date(),
+        getCommissionValues: typeof window.getSaleCommissionValues === "function"
+          ? window.getSaleCommissionValues
+          : undefined,
+        managerCatalog: (window._managersCache || []).filter(m => m && !m.disabled),
+        advisorCatalog: (window._advisorsCache || []).filter(a => a && !a.disabled),
+      };
+    }
+
+    function commEnrichSalesForReport(sales) {
+      if (typeof window.hydrateApprovedSaleCommissionsForDisplay === "function") {
+        window.hydrateApprovedSaleCommissionsForDisplay();
+      }
+      const resolve = typeof window.getSaleCommissionValues === "function"
+        ? window.getSaleCommissionValues
+        : (s) => ({
+          advisor: Number(s?.advisorCommission) || Number(s?.estAdvisorCommission) || 0,
+          manager: Number(s?.managerCommission) || Number(s?.estManagerCommission) || 0,
+        });
+      return (sales || []).map(s => {
+        const comm = resolve(s);
+        return {
+          ...s,
+          advisorCommission: comm.advisor,
+          managerCommission: comm.manager,
+        };
+      });
+    }
+
+    window.getCommissionPeriodFilteredSales = function (fromDate, toDate) {
+      const engine = commGetEngine();
+      const st = window._commissionFilterState || {};
+      const from = fromDate || st.fromDate;
+      const to = toDate || st.toDate || from;
+      const scoped = typeof window.getScopedClosedSales === "function"
+        ? window.getScopedClosedSales()
+        : (window._closedSalesCache || []);
+      if (!engine?.saleInMonthRange) {
+        return scoped.filter(s => s.approvalStatus === "approved");
+      }
+      return scoped.filter(s => engine.saleInMonthRange(s, from, to));
+    };
+
+    window.fetchApprovedSalesForCommission = async function (fromDate, toDate) {
+      const engine = commGetEngine();
+      const st = window._commissionFilterState || {};
+      const from = fromDate || st.fromDate;
+      const to = toDate || st.toDate || from;
+      const session = window._session || {};
+      const role = session.role;
+      const sessionManagerId = session.managerId || null;
+      const filterMgrId = st.managerId || "";
+      const scopedManagerId = role === "manager" ? sessionManagerId : (filterMgrId || null);
+      const range = engine?.resolveMonthRange ? engine.resolveMonthRange(from, to) : null;
+      const fallback = () => window.getCommissionPeriodFilteredSales(from, to);
+      if (!range) return fallback();
+
+      const monthKeys = range.monthKeys || [];
+      if (!monthKeys.length) return fallback();
+
+      const merged = new Map();
+      const runQuery = async (constraints) => {
+        const snap = await getDocs(query(collection(db, "closed_sales"), ...constraints));
+        snap.docs.forEach(d => merged.set(d.id, { id: d.id, ...d.data() }));
+      };
+
+      try {
+        for (const mk of monthKeys) {
+          const constraints = [
+            where("approvalStatus", "==", "approved"),
+            where("commissionMonthKey", "==", mk),
+          ];
+          if (scopedManagerId) {
+            constraints.push(where("managerId", "==", scopedManagerId));
+          }
+          await runQuery(constraints);
+        }
+
+        if (!merged.size && monthKeys.length > 1) {
+          const constraints = [
+            where("approvalStatus", "==", "approved"),
+            where("approvedAt", ">=", range.start),
+            where("approvedAt", "<=", range.end),
+          ];
+          if (scopedManagerId) {
+            constraints.push(where("managerId", "==", scopedManagerId));
+          }
+          await runQuery(constraints);
+        }
+
+        if (merged.size) return Array.from(merged.values());
+        return fallback();
+      } catch (err) {
+        console.warn("[Commission] Indexed query failed, using cache:", err.message);
+        return fallback();
+      }
+    };
+
+    async function commFetchReportFromApi(sales, opts) {
+      const { url, secret } = commGetApiConfig();
+      const session = window._session || {};
+      try {
+        const res = await fetch(`${url}/api/commission/report`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${secret}`,
+            "X-User-Role": opts.sessionRole || session.role || "admin",
+            "X-Manager-Id": opts.sessionManagerId || session.managerId || "",
+          },
+          body: JSON.stringify({ sales, options: opts }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return { ok: false, error: data.error || `API ${res.status}` };
+        return data;
+      } catch (err) {
+        return { ok: false, error: err.message || "Commission API unavailable" };
+      }
+    }
+
+    function commBuildReportLocal(sales, opts) {
+      const engine = commGetEngine();
+      if (!engine?.buildCommissionReport) {
+        return { ok: false, error: "Commission engine unavailable." };
+      }
+      return engine.buildCommissionReport(sales, opts);
+    }
+
+    function commPopulateMonthYearSelects() {
+      const session = window._session || {};
+      const isManager = session.role === "manager";
+      const now = new Date();
+      const yearsBack = isManager ? 0 : 3;
+      const startYear = now.getFullYear() - yearsBack;
+      const endYear = now.getFullYear();
+      const years = [];
+      for (let y = endYear; y >= startYear; y--) years.push(y);
+      const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+      const fillMonths = (selId) => {
+        const sel = document.getElementById(selId);
+        if (!sel) return;
+        const yearSel = document.getElementById(selId.replace("-month", "-year"));
+        const y = yearSel ? parseInt(yearSel.value, 10) : endYear;
+        const limit = y === endYear ? now.getMonth() + 1 : 12;
+        const minM = isManager && y === endYear ? Math.max(1, limit - 1) : 1;
+        sel.innerHTML = monthNames.map((name, i) => {
+          const m = i + 1;
+          if (m > limit || (isManager && y === endYear && m < minM)) return "";
+          return `<option value="${m}">${name}</option>`;
+        }).join("");
+      };
+
+      ["comms-from-year", "comms-to-year"].forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel) sel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join("");
+      });
+      fillMonths("comms-from-month");
+      fillMonths("comms-to-month");
+
+      const st = window._commissionFilterState || {};
+      const fromP = commParseMonthKey(st.fromDate);
+      const toP = commParseMonthKey(st.toDate);
+      if (fromP) {
+        const fy = document.getElementById("comms-from-year");
+        const fm = document.getElementById("comms-from-month");
+        if (fy) fy.value = String(fromP.year);
+        fillMonths("comms-from-month");
+        if (fm) fm.value = String(fromP.month);
+      }
+      if (toP) {
+        const ty = document.getElementById("comms-to-year");
+        const tm = document.getElementById("comms-to-month");
+        if (ty) ty.value = String(toP.year);
+        fillMonths("comms-to-month");
+        if (tm) tm.value = String(toP.month);
+      }
+    }
+
+    window.populateCommissionsFilterDropdowns = function () {
+      const session = window._session || {};
+      const isAdmin = session.role === "admin";
+      const isManager = session.role === "manager";
+      const esc = window._esc || (s => String(s ?? ""));
+      const st = window._commissionFilterState || {};
+      const role = isManager ? "manager" : (st.role || "manager");
+      const viewMode = st.viewMode || "all_managers";
+      const isAllRole = role === "all";
+
+      commPopulateMonthYearSelects();
+
+      const roleWrap = document.getElementById("comms-role-wrap");
+      const viewWrap = document.getElementById("comms-view-wrap");
+      const mgrWrap = document.getElementById("comms-manager-wrap");
+      const advWrap = document.getElementById("comms-advisor-wrap");
+      const roleSel = document.getElementById("comms-role");
+      const viewSel = document.getElementById("comms-view-mode");
+      const mgrSel = document.getElementById("comms-manager");
+      const advSel = document.getElementById("comms-advisor");
+
+      if (roleWrap) roleWrap.classList.toggle("hidden", isManager);
+      if (roleSel && !isManager) {
+        roleSel.value = role;
+        const allOpt = roleSel.querySelector('option[value="all"]');
+        if (allOpt) allOpt.hidden = false;
+      }
+
+      if (viewWrap) viewWrap.classList.toggle("hidden", isAllRole || isManager || role === "advisor");
+      const views = COMM_VIEW_OPTIONS[isAllRole ? "all" : role] || COMM_VIEW_OPTIONS.manager;
+      if (viewSel && !isAllRole && !isManager && role !== "advisor") {
+        viewSel.innerHTML = views.map(v => `<option value="${v.id}">${v.label}</option>`).join("");
+        if (views.some(v => v.id === viewMode)) viewSel.value = viewMode;
+      }
+
+      const showMgr = !isManager && !isAllRole && (
+        (role === "manager" && (viewMode === "manager_individual" || viewMode === "manager_team")) ||
+        role === "advisor"
+      );
+      const showAdv = !isManager && !isAllRole && role === "advisor" && !!st.managerId;
+      if (mgrWrap) mgrWrap.classList.toggle("hidden", !showMgr);
+      if (advWrap) advWrap.classList.toggle("hidden", !showAdv);
+
+      const managers = (window._managersCache || []).filter(m => !m.disabled);
+      if (mgrSel && showMgr) {
+        const mgrLabel = document.querySelector("#comms-manager-wrap label");
+        if (mgrLabel) {
+          mgrLabel.textContent = role === "advisor" ? "Manager (required)" : "Manager";
+        }
+        mgrSel.innerHTML = role === "manager"
+          ? `<option value="">All Managers</option>` +
+            managers.map(m => `<option value="${esc(m.id)}">${esc(m.name || m.empId || "Manager")}</option>`).join("")
+          : `<option value="">— Select manager —</option>` +
+            managers.map(m => `<option value="${esc(m.id)}">${esc(m.name || m.empId || "Manager")}</option>`).join("");
+        if (st.managerId) mgrSel.value = st.managerId;
+      }
+
+      if (advSel && showAdv) {
+        let advisors = (window._advisorsCache || []).filter(a => !a.disabled);
+        if (st.managerId) {
+          advisors = advisors.filter(a =>
+            typeof window.advisorBelongsToManager === "function"
+              ? window.advisorBelongsToManager(a, st.managerId)
+              : (a.managerId || "") === st.managerId
+          );
+        }
+        advSel.innerHTML = `<option value="">All Advisors</option>` +
+          advisors.map(a => `<option value="${esc(a.id)}">${esc(a.name || "Advisor")}</option>`).join("");
+        if (st.advisorId) advSel.value = st.advisorId;
+      }
+
+      if (isManager && viewSel) {
+        viewSel.innerHTML = COMM_VIEW_OPTIONS.manager
+          .filter(v => v.id !== "all_managers")
+          .map(v => `<option value="${v.id}">${v.label}</option>`).join("");
+        viewSel.value = viewMode === "all_managers" ? "manager_team" : viewMode;
+      }
+    };
+
+    window.onCommissionsFilterChange = function () {
+      const prev = window._commissionFilterState || {};
+      const next = commReadFilterStateFromUI();
+      if (next.role === "advisor" && prev.managerId && next.managerId !== prev.managerId) {
+        next.advisorId = "";
+        const advSel = document.getElementById("comms-advisor");
+        if (advSel) advSel.value = "";
+      }
+      if (prev.role !== next.role) {
+        if (next.role === "advisor") next.viewMode = "all_advisors";
+        if (next.role === "manager") next.viewMode = "all_managers";
+        if (next.role === "all") next.viewMode = "all_combined";
+      }
+      window._commissionFilterState = next;
+      window.populateCommissionsFilterDropdowns();
+      const hint = document.getElementById("comms-date-hint");
+      const v = commValidateDateRange(window._commissionFilterState.fromDate, window._commissionFilterState.toDate);
+      if (hint) {
+        hint.classList.toggle("hidden", v.ok);
+        if (!v.ok) hint.textContent = v.error;
+      }
+    };
+
+    window.applyCommissionsFilters = function () {
+      window._commissionFilterState = commReadFilterStateFromUI();
+      const v = commValidateDateRange(window._commissionFilterState.fromDate, window._commissionFilterState.toDate);
+      const hint = document.getElementById("comms-date-hint");
+      const errEl = document.getElementById("comms-error");
+      if (!v.ok) {
+        if (hint) { hint.textContent = v.error; hint.classList.remove("hidden"); }
+        if (errEl) { errEl.textContent = v.error; errEl.classList.remove("hidden"); }
+        return;
+      }
+      if (hint) hint.classList.add("hidden");
+      if (errEl) errEl.classList.add("hidden");
+      window.refreshCommissionsPage();
+    };
+
+    function commRenderTable(report) {
+      const esc = window._esc || (s => String(s ?? ""));
+      const tbody = document.getElementById("comms-table-body");
+      const tfoot = document.getElementById("comms-table-foot");
+      const titleEl = document.getElementById("comms-table-title");
+      const mgrTh = document.getElementById("comms-th-manager");
+      const advTh = document.getElementById("comms-th-advisor");
+      const typeTh = document.getElementById("comms-th-type");
+      const salesTh = document.getElementById("comms-th-sales");
+      const pres = report.presentation || {};
+      const hideMgr = !!pres.hideManagerColumn;
+      const hideAdv = !!pres.hideAdvisorColumn;
+      const showType = !!pres.showTypeColumn;
+      const showSalesAmount = pres.showSalesAmount !== false;
+      if (mgrTh) mgrTh.classList.toggle("hidden", hideMgr);
+      if (advTh) advTh.classList.toggle("hidden", hideAdv);
+      if (typeTh) typeTh.classList.toggle("hidden", !showType);
+      if (salesTh) salesTh.textContent = showSalesAmount ? "Sales Amount" : "Sales";
+
+      const rows = (report.rows && report.rows.length)
+        ? report.rows
+        : (report.presentation?.rows || report.advisors || []);
+      const colSpan = 5 + (showType ? 1 : 0);
+      if (titleEl) titleEl.textContent = pres.title || "Commission breakdown";
+
+      const fmtSalesCell = (row) => {
+        if (showSalesAmount) return commFmtMoney(row.salesAmount || 0);
+        return String(row.salesCount || 0);
+      };
+
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-12 text-gray-400 text-sm">No commission data for this period and filters.</td></tr>`;
+        if (tfoot) tfoot.classList.add("hidden");
+        return;
+      }
+
+      tbody.innerHTML = rows.map(row => `
+        <tr class="border-b border-gray-50 hover:bg-gray-50/50">
+          ${showType ? `<td class="px-4 py-3 text-xs text-gray-500">${esc(row.rowType || "—")}</td>` : ""}
+          <td class="px-4 py-3 font-medium text-gray-800">${esc(row.name)}</td>
+          <td class="px-4 py-3 text-right text-gray-600">${fmtSalesCell(row)}</td>
+          <td class="px-4 py-3 text-right text-sky-700 ${hideAdv ? "hidden" : ""}">${hideAdv ? "—" : commFmtMoney(row.advisorCommission)}</td>
+          <td class="px-4 py-3 text-right text-purple-700 ${hideMgr ? "hidden" : ""}">${hideMgr ? "—" : commFmtMoney(row.managerCommission)}</td>
+          <td class="px-4 py-3 text-right font-semibold text-violet-800">${commFmtMoney(row.total)}</td>
+        </tr>`).join("");
+
+      if (tfoot) {
+        tfoot.classList.toggle("hidden", !pres.showTeamTotal);
+        if (pres.showTeamTotal && report.summary) {
+          const s = report.summary;
+          const salesTotal = showSalesAmount
+            ? commFmtMoney(rows.reduce((sum, r) => sum + (Number(r.salesAmount) || 0), 0))
+            : String(s.saleCount || 0);
+          tfoot.innerHTML = `
+            <tr>
+              ${showType ? '<td class="px-4 py-3"></td>' : ""}
+              <td class="px-4 py-3 font-semibold text-violet-900">Team total</td>
+              <td class="px-4 py-3 text-right font-medium text-violet-800" id="comms-foot-sales">${salesTotal}</td>
+              <td class="px-4 py-3 text-right font-medium text-violet-800 ${hideAdv ? "hidden" : ""}" id="comms-foot-advisor">${hideAdv ? "—" : commFmtMoney(s.totalAdvisorCommission)}</td>
+              <td class="px-4 py-3 text-right font-medium text-violet-800 ${hideMgr ? "hidden" : ""}" id="comms-foot-manager">${hideMgr ? "—" : commFmtMoney(s.totalManagerCommission)}</td>
+              <td class="px-4 py-3 text-right font-bold text-violet-900" id="comms-foot-total">${commFmtMoney(s.teamIncentive || s.totalCommission)}</td>
+            </tr>`;
+        }
+      }
+    }
+
+    window.initCommissionsPage = function () {
+      const session = window._session || {};
+      if (!(session.role === "admin" || session.role === "manager")) return;
+      const engine = commGetEngine();
+      if (engine?.defaultMonthRange && !window._commissionFilterState?.fromDate) {
+        const def = engine.defaultMonthRange();
+        window._commissionFilterState = {
+          fromDate: def.fromDate || def.fromMonth,
+          toDate: def.toDate || def.toMonth,
+          role: "manager",
+          viewMode: session.role === "manager" ? "manager_team" : "all_managers",
+          managerId: session.role === "manager" ? (session.managerId || "") : "",
+          advisorId: "",
+        };
+      }
+      if (session.role === "manager") {
+        window._commissionFilterState.viewMode = window._commissionFilterState.viewMode || "manager_team";
+        window._commissionFilterState.managerId = session.managerId || "";
+      }
+      window.populateCommissionsFilterDropdowns();
+    };
+
+    window.refreshCommissionsPage = async function () {
+      const session = window._session || {};
+      if (!(session.role === "admin" || session.role === "manager")) return;
+      const section = document.getElementById("section-commission-report");
+      if (!section?.classList.contains("active")) return;
+
+      const errEl = document.getElementById("comms-error");
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      if (errEl) errEl.classList.add("hidden");
+
+      const opts = commGetReportOptions();
+      const tbody = document.getElementById("comms-table-body");
+      const dateCheck = commValidateDateRange(opts.fromDate, opts.toDate);
+      if (!dateCheck.ok) {
+        if (errEl) { errEl.textContent = dateCheck.error; errEl.classList.remove("hidden"); }
+        return;
+      }
+
+      if (session.role === "admin") {
+        if ((opts.viewMode === "manager_individual" || opts.viewMode === "manager_team") && !opts.managerId) {
+          set("comms-period-label", "Select a manager");
+          if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-gray-400 text-sm">Choose a manager for this report view.</td></tr>`;
+          return;
+        }
+        if (opts.role === "advisor" && !opts.managerId) {
+          set("comms-period-label", "Select a manager");
+          if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-gray-400 text-sm">Select a manager first, then choose an advisor or All Advisors.</td></tr>`;
+          return;
+        }
+      }
+
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-gray-400 text-sm">Loading commission data…</td></tr>`;
+      }
+
+      let sales = [];
+      try {
+        sales = await window.fetchApprovedSalesForCommission(opts.fromDate, opts.toDate);
+      } catch (_) {
+        sales = window.getCommissionPeriodFilteredSales(opts.fromDate, opts.toDate);
+      }
+
+      sales = commEnrichSalesForReport(sales);
+
+      let report = commBuildReportLocal(sales, opts);
+      if (!report.ok) {
+        report = await commFetchReportFromApi(sales, opts);
+      }
+
+      if (!report.ok) {
+        if (errEl) { errEl.textContent = report.error || "Could not load report."; errEl.classList.remove("hidden"); }
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-red-400 text-sm">${(report.error || "Error").replace(/</g, "&lt;")}</td></tr>`;
+        return;
+      }
+
+      window._lastCommissionReport = report;
+      const pres = report.presentation || {};
+      const hideMgrSummary = !!pres.advisorOnlySummary;
+      const hideAdvSummary = !!pres.managerOnlySummary;
+      set("comms-period-label", `${report.periodLabel || ""} · ${report.summary?.saleCount || 0} approved sale(s)`);
+      set("comms-summary-total", commFmtMoney(report.summary?.totalCommission));
+      set("comms-summary-advisor", hideAdvSummary ? "—" : commFmtMoney(report.summary?.totalAdvisorCommission));
+      set("comms-summary-manager", hideMgrSummary ? "—" : commFmtMoney(report.summary?.totalManagerCommission));
+      commRenderTable({ ...report, rows: report.rows?.length ? report.rows : pres.rows });
+    };
+
+    window.exportCommissionReportCsv = function () {
+      const report = window._lastCommissionReport;
+      if (!report?.summary) {
+        window.showToast?.("Load commission data before exporting.", "error");
+        return;
+      }
+      const hideMgr = !!report.presentation?.hideManagerColumn;
+      const rows = report.rows || [];
+      const header = hideMgr
+        ? ["Name", "Sales", "Advisor Incentive", "Total"]
+        : ["Name", "Sales", "Advisor Incentive", "Manager Incentive", "Total"];
+      const lines = [header.join(",")];
+      rows.forEach(r => {
+        lines.push(hideMgr
+          ? [`"${String(r.name || "").replace(/"/g, '""')}"`, r.salesCount || 0, r.advisorCommission || 0, r.total || 0].join(",")
+          : [`"${String(r.name || "").replace(/"/g, '""')}"`, r.salesCount || 0, r.advisorCommission || 0, r.managerCommission || 0, r.total || 0].join(","));
+      });
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `commission-${(report.periodLabel || "report").replace(/\s+/g, "-").toLowerCase()}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    window.navigateToCommissions = function () {
+      if (typeof window.showSection === "function") {
+        window.showSection("commission-report");
+      }
+    };
+
+    window.scrollToCommissionInsights = window.navigateToCommissions;
+    window.refreshCommissionInsights = window.refreshCommissionsPage;
+    window.initCommissionInsightsUI = window.initCommissionsPage;
+    window.onCommissionFilterChange = window.onCommissionsFilterChange;
+    window.populateCommissionFilterDropdowns = window.populateCommissionsFilterDropdowns;
 
     /** One-time fetch of closed_sales when listeners lag. */
     window.reloadClosedSalesCache = async function (opts) {
@@ -16615,6 +17424,7 @@
 
     // ── PAGE TITLE MAP ───────────────────────────────────────────────────
     const PAGE_TITLES = {
+      "commission-report": "Total Commission Report",
       dashboard:   "Dashboard Overview",
       leads:       "All Leads",
       followups:   "Smart Follow-ups",
@@ -16639,11 +17449,71 @@
       appmgmt:     "App Management",
     };
 
+    const SECTION_ROUTES = {
+      dashboard: "/",
+      leads: "/leads",
+      followups: "/followups",
+      managers: "/managers",
+      advisors: "/advisors",
+      approvals: "/approvals",
+      performance: "/performance",
+      "commission-report": "/commissions/report",
+      closedsales: "/closedsales",
+      commission: "/commission-settings",
+      settings: "/settings",
+      permissions: "/permissions",
+      whatsapp: "/whatsapp",
+      digitalcard: "/digitalcard",
+      profile: "/profile",
+      company: "/company",
+      systemconfig: "/systemconfig",
+      apisettings: "/apisettings",
+      appmgmt: "/appmgmt",
+      announcements: "/announcements",
+      exammgmt: "/exammgmt",
+      certsettings: "/certsettings",
+      managerexam: "/managerexam",
+    };
+
+    const ROUTE_TO_SECTION = Object.fromEntries(
+      Object.entries(SECTION_ROUTES).map(([k, v]) => [v, k])
+    );
+    ROUTE_TO_SECTION["/reports/commission"] = "commission-report";
+    ROUTE_TO_SECTION["/commission-report"] = "commission-report";
+
+    function normalizeSectionName(name) {
+      if (name === "reports-commission" || name === "commissions-report") return "commission-report";
+      return name;
+    }
+
+    function syncUrlForSection(name, opts) {
+      if (opts?.skipUrlSync) return;
+      const path = SECTION_ROUTES[name];
+      if (!path || !window.history?.pushState) return;
+      const target = path === "/" ? "/" : path;
+      if (window.location.pathname !== target) {
+        history.pushState({ section: name }, "", target);
+      }
+    }
+
+    function sectionFromPath() {
+      const p = (window.location.pathname || "/").replace(/\/$/, "") || "/";
+      return ROUTE_TO_SECTION[p] || "dashboard";
+    }
+
+    window.addEventListener("popstate", () => {
+      const name = sectionFromPath();
+      if (typeof showSection === "function") {
+        showSection(name, { skipUrlSync: true });
+      }
+    });
+
     // ── SECTION SWITCHER ─────────────────────────────────────────────────
     // Hides all dash-section divs, shows the requested one,
     // updates the header title, and highlights the correct nav link.
     function showSection(name, options) {
       const opts = options || {};
+      name = normalizeSectionName(name);
       if (!opts.bypassExamGate && typeof window.canAccessDashboardSection === "function" && !window.canAccessDashboardSection(name)) {
         name = "managerexam";
         opts.bypassExamGate = true;
@@ -16654,6 +17524,11 @@
       if (name === "systemconfig" && window._session?.role !== "admin") {
         window.showToast("System Configuration is available to administrators only.", "error");
         return;
+      }
+
+      if (name === "commission-report" && window._session?.role !== "admin" && window._session?.role !== "manager") {
+        window.showToast?.("Commission report is available to administrators and managers only.", "error");
+        return showSection("dashboard", { ...opts, skipUrlSync: true });
       }
 
       // If navigating away from API Settings, lock it (security: clear in-memory keys)
@@ -16678,6 +17553,12 @@
       // When entering Commission Settings, render the rules list
       if (name === "commission" && typeof window.renderCommissionRulesList === "function") {
         window.renderCommissionRulesList();
+      }
+      if (name === "commission-report") {
+        setTimeout(() => {
+          if (typeof window.initCommissionsPage === "function") window.initCommissionsPage();
+          if (typeof window.applyCommissionsFilters === "function") window.applyCommissionsFilters();
+        }, 50);
       }
       if (name === "announcements" && typeof window.populateAnnouncementAdminForm === "function") {
         window.populateAnnouncementAdminForm();
@@ -16788,6 +17669,8 @@
           setTimeout(window.renderSalesForecastWidget, 100);
         }
       }
+
+      syncUrlForSection(name, opts);
 
       // Update header title
       const titleText = PAGE_TITLES[name] || "Dashboard";
@@ -16934,7 +17817,7 @@
       ];
       const managerSections = [
         "section-dashboard", "section-leads", "section-closedsales", "section-advisors",
-        "section-followups", "section-performance", "section-whatsapp", "section-digitalcard",
+        "section-followups", "section-performance", "section-commission-report", "section-whatsapp", "section-digitalcard",
       ];
       if (isAdvisor) {
         managerSections.forEach(id => {
@@ -17024,6 +17907,11 @@
 
       const sfFilterWrap = document.getElementById("sf-advisor-filter-wrap");
       if (sfFilterWrap) sfFilterWrap.classList.toggle("hidden", !isManager);
+
+      const commNav = document.getElementById("nav-commission-report");
+      const commCard = document.getElementById("dash-card-commission");
+      if (commNav) commNav.classList.toggle("hidden", isAdvisor || !(isAdmin || isManager));
+      if (commCard) commCard.classList.toggle("hidden", isAdvisor || !(isAdmin || isManager));
     };
 
     /** Manager advisors page: hide cross-manager columns and admin-only controls. */
@@ -17374,7 +18262,8 @@
             if (typeof window.initDigitalCardSection === "function") window.initDigitalCardSection();
           }, 150);
         } else if (typeof showSection === "function") {
-          showSection("dashboard");
+          const initial = typeof sectionFromPath === "function" ? sectionFromPath() : "dashboard";
+          showSection(initial, { skipUrlSync: initial === "dashboard" && (location.pathname === "/" || location.pathname === "") });
         }
         if (session?.role === "manager" && opts.freshLogin
             && !(typeof window.managerExamBlocksAccess === "function" && window.managerExamBlocksAccess())) {

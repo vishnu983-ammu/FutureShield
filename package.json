@@ -9,6 +9,7 @@
     "start:https": "node scripts/start-wa-https.js",
     "generate:certs": "node scripts/generate-ssl-certs.js",
     "start:apk": "node apk-server.js",
+    "start:commission": "node commission-server.js",
     "dev": "nodemon whatsapp-server.js",
     "dev:apk": "nodemon apk-server.js",
     "setup:mobile": "node scripts/setup-mobile.js",
