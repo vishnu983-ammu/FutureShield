@@ -694,6 +694,8 @@ const api = {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = api;
 }
-if (typeof global !== "undefined") {
+if (typeof window !== "undefined") {
+  window.CommissionEngine = api;
+} else if (typeof global !== "undefined") {
   global.CommissionEngine = api;
 }

@@ -64,6 +64,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "approvalStatus", "order": "ASCENDING" },
+        { "fieldPath": "paymentPendingNotificationSent", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "closed_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalStatus", "order": "ASCENDING" },
         { "fieldPath": "renewalNotificationSent", "order": "ASCENDING" },
         { "fieldPath": "renewalNotifyDateKey", "order": "ASCENDING" }
       ]

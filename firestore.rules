@@ -22,6 +22,16 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    match /contest_settings/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /website_settings/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /advisors/{advisorId} {
       allow read: if resource.data.cardEnabled == true
                   && resource.data.disabled != true;

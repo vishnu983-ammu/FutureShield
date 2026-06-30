@@ -19,7 +19,9 @@
     "prebuild:apk": "npm run build:css",
     "build:apk": "node scripts/build-apk.js",
     "test:wa": "node scripts/test-wa-connection.js",
-    "renewal:cron": "node scripts/renewal-notification-cron.js"
+    "renewal:cron": "node scripts/renewal-notification-cron.js",
+    "payment:cron": "node scripts/payment-pending-cron.js",
+    "seed:admin": "node scripts/seed-admin.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

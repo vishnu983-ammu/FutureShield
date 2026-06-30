@@ -192,7 +192,7 @@ app.listen(PORT, () => {
   console.log(`  Upload:      POST http://localhost:${PORT}/api/apk/upload`);
   console.log(`  Download:    http://localhost:${PORT}/downloads/${APK_FILENAME}`);
   console.log(`  Storage:     ${DOWNLOADS_DIR}`);
-  console.log(`  Auth token:  ${APK_SECRET}`);
+  console.log(`  Auth:        Bearer token required (set APK_SECRET in .env)`);
   console.log(`  APK on disk: ${info.exists ? `yes (${info.sizeMB} MB)` : "not yet — upload or run npm run build:apk"}`);
   console.log(`  ─────────────────────────────────────────\n`);
 });

@@ -12,16 +12,91 @@
   <meta property="og:type" content="website" />
   <title>Admin Dashboard – FutureShield</title>
 
+  <!-- Suppress login flash + dashboard flash on in-app navigation (full page reload with session) -->
+  <script>
+    (function () {
+      var ROUTE_TO_SECTION = {
+        "/": "dashboard",
+        "/leads": "leads",
+        "/followups": "followups",
+        "/managers": "managers",
+        "/advisors": "advisors",
+        "/approvals": "approvals",
+        "/performance": "performance",
+        "/commissions/report": "commission-report",
+        "/reports/commission": "commission-report",
+        "/commission-report": "commission-report",
+        "/closedsales": "closedsales",
+        "/commission-settings": "commission",
+        "/settings": "settings",
+        "/permissions": "permissions",
+        "/whatsapp": "whatsapp",
+        "/digitalcard": "digitalcard",
+        "/profile": "profile",
+        "/company": "company",
+        "/systemconfig": "systemconfig",
+        "/apisettings": "apisettings",
+        "/appmgmt": "appmgmt",
+        "/announcements": "announcements",
+        "/exammgmt": "exammgmt",
+        "/certsettings": "certsettings",
+        "/managerexam": "managerexam",
+        "/payment-status": "paymentstatus",
+        "/advisor-approvals": "advisor-approvals",
+        "/contest-setup": "contest-setup",
+        "/contest-progress": "contest-progress",
+        "/contest-results": "contest-progress",
+        "/contest": "contest",
+        "/payment-summary": "mgrpaymentsummary"
+      };
+      function routeSectionFromPath() {
+        var p = (location.pathname || "/").replace(/\/$/, "") || "/";
+        if (ROUTE_TO_SECTION[p]) return ROUTE_TO_SECTION[p];
+        if (/^\/contest-details\/[^/]+$/.test(p)) return "contest";
+        return "dashboard";
+      }
+      try {
+        var raw = sessionStorage.getItem("fs_auth_v1");
+        if (raw) {
+          var s = JSON.parse(raw);
+          if (s && s.role) {
+            var section = routeSectionFromPath();
+            document.documentElement.classList.add("has-session", "role-" + s.role, "route-boot");
+            document.documentElement.setAttribute("data-route-section", section);
+            var crit = document.createElement("style");
+            crit.id = "route-boot-critical";
+            crit.textContent =
+              "html.route-boot .dash-section,html.route-boot .dash-section.active{display:none!important}" +
+              "html.route-boot #page-route-loader{display:flex!important}";
+            document.head.appendChild(crit);
+            return;
+          }
+        }
+      } catch (_) { /* fall through */ }
+      document.documentElement.classList.add("show-login");
+    })();
+  </script>
+
+  <script src="/scripts/fs-log.js"></script>
+  <script src="/scripts/file-protocol-guard.js"></script>
+
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
   <link rel="alternate icon" href="/assets/favicon.svg" />
 
   <!-- Tailwind CSS (production build — npm run build:css) -->
   <link rel="stylesheet" href="/assets/css/tailwind.css" />
+  <link rel="stylesheet" href="/assets/css/contest.css" />
 
   <!-- Chart.js — lightweight canvas charting library -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="/scripts/sales-forecast.js"></script>
   <script src="/scripts/commission-engine.js"></script>
+  <script src="/scripts/payment-approval.js"></script>
+  <script src="/scripts/manager-payment-summary.js"></script>
+  <script src="/scripts/notification-navigation.js"></script>
+  <script src="/scripts/contest-management.js"></script>
+  <script src="/scripts/advisor-approval.js"></script>
+  <script src="/scripts/product-commission-settings.js"></script>
 
   <!-- jsPDF + AutoTable — client-side PDF generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -37,7 +112,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <style>
-    body { font-family: 'Inter', sans-serif; }
+    body { font-family: 'Inter', sans-serif; background: #f9fafb; }
 
     /* Custom scrollbar for sidebar */
     ::-webkit-scrollbar       { width: 6px; }
@@ -136,7 +211,44 @@
 
     /* ── Dashboard section toggling ─────────────────────── */
     .dash-section { display: none; }
-    .dash-section.active { display: block; }
+    .dash-section.active { display: block !important; }
+    a[id^="dash-card-"] { display: block; text-decoration: none; color: inherit; }
+    a[id^="dash-card-"].hidden { display: none !important; }
+    html.has-session.role-manager #dash-card-managers,
+    html.has-session.role-advisor #dash-card-managers { display: none !important; }
+    html.has-session.role-manager #nav-managers,
+    html.has-session.role-advisor #nav-managers { display: none !important; }
+
+    /* Route transition — neutral loader instead of dashboard flash */
+    #main-content > main { position: relative; min-height: 12rem; }
+    #page-route-loader {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      background: #f9fafb;
+      transition: opacity 0.2s ease;
+    }
+    html.route-boot #page-route-loader { display: flex !important; }
+    html.route-boot .dash-section,
+    html.route-boot .dash-section.active { display: none !important; }
+    html.route-ready #page-route-loader { display: none !important; opacity: 0; pointer-events: none; }
+    .page-route-spinner {
+      width: 2rem; height: 2rem; border-radius: 50%;
+      border: 2.5px solid #e5e7eb;
+      border-top-color: #6366f1;
+      animation: spin 0.7s linear infinite;
+    }
+    .page-route-loader-text {
+      font-size: 0.8125rem;
+      color: #9ca3af;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
 
     /* ── Sidebar nav active state ───────────────────────── */
     .nav-item.active {
@@ -618,8 +730,10 @@
 
     /* ── Login Page ──────────────────────────────────────── */
     #login-overlay {
+      display: none;
       background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
     }
+    html.show-login #login-overlay { display: flex; }
     .login-card {
       background: rgba(255,255,255,0.04);
       backdrop-filter: blur(20px);
@@ -700,10 +814,9 @@
     }
     /* App-level init splash overlay */
     #app-init-splash {
+      display: none !important;
       position: fixed; inset: 0; z-index: 10000;
       background: #0f172a;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 1rem;
       transition: opacity 0.5s ease;
     }
     #app-init-splash.fade-out { opacity: 0; pointer-events: none; }
@@ -715,8 +828,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     /* Smooth fade-in for the main app after init */
-    #app-root { opacity: 0; transition: opacity 0.4s ease; }
-    #app-root.ready { opacity: 1; }
+    #app-root { opacity: 1; }
 
     /* ── User Profile Dropdown Menu ─────────────────────────── */
     .user-menu-panel {
@@ -1412,39 +1524,7 @@
 
 <body class="bg-gray-100 text-gray-800 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden">
 
-  <!-- ═══════════════════════════════════════════════════════════
-       APP INIT SPLASH — shown during Firebase cold-start (~300–800 ms).
-       Fades out as soon as branding data is confirmed from Firestore.
-       On subsequent loads, branding is pre-loaded from localStorage so
-       this splash disappears almost instantly.
-  ═══════════════════════════════════════════════════════════ -->
-  <div id="app-init-splash" role="status" aria-label="Loading application">
-    <div id="splash-logo-ring"
-      style="width:72px;height:72px;border-radius:1rem;overflow:hidden;
-             background:linear-gradient(135deg,#6366f1,#4f46e5);
-             display:flex;align-items:center;justify-content:center;
-             box-shadow:0 8px 30px rgba(99,102,241,0.45);">
-      <img id="splash-logo-img" src="" alt=""
-        style="width:100%;height:100%;object-fit:cover;display:none;border-radius:1rem;"/>
-      <svg id="splash-logo-icon" style="width:36px;height:36px;color:#fff;opacity:0.85"
-           fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2
-             0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 8v-3a1 1 0 011-1h2a1 1 0 011 1v3m-4 0h4"/>
-      </svg>
-    </div>
-    <p id="splash-company-name"
-      style="color:#fff;font-size:1.15rem;font-weight:700;letter-spacing:-0.01em;
-             margin-top:0.5rem;text-align:center;">
-      Loading…
-    </p>
-    <div class="splash-spinner"></div>
-    <p style="color:rgba(255,255,255,0.35);font-size:0.72rem;margin-top:0.25rem;">
-      Connecting to Firestore
-    </p>
-  </div><!-- /#app-init-splash -->
-
-  <!-- Main app wrapper — fades in after branding is confirmed -->
+  <!-- Main app wrapper -->
   <div id="app-root" style="display:contents;">
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -1563,8 +1643,8 @@
 
       <!-- Footer hint -->
       <p class="text-xs text-slate-600 text-center">
-        Default admin: <code class="text-slate-400">admin</code> /
-        <code class="text-slate-400">Admin@123</code>
+        First-time setup: run <code class="text-slate-400">npm run seed:admin</code> with
+        <code class="text-slate-400">ADMIN_SEED_PASSWORD</code> in your <code class="text-slate-400">.env</code>.
       </p>
 
     </div>
@@ -1627,9 +1707,8 @@
     <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
 
       <!-- Dashboard -->
-      <a href="#" id="nav-dashboard" data-label="Dashboard"
-        onclick="showSection('dashboard'); return false;"
-        class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors">
+      <a href="/" id="nav-dashboard" data-label="Dashboard"
+        class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0
@@ -1639,8 +1718,7 @@
       </a>
 
       <!-- Leads -->
-      <a href="#" id="nav-leads" data-label="Leads"
-        onclick="showSection('leads'); return false;"
+      <a href="/leads" id="nav-leads" data-label="Leads"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1651,8 +1729,7 @@
       </a>
 
       <!-- Follow-ups -->
-      <a href="#" id="nav-followups" data-label="Follow-ups"
-        onclick="showSection('followups'); return false;"
+      <a href="/followups" id="nav-followups" data-label="Follow-ups"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1665,8 +1742,7 @@
       </a>
 
       <!-- System Configuration (Admin-only) -->
-      <a href="#" id="nav-systemconfig" data-label="System Configuration"
-        onclick="showSection('systemconfig'); return false;"
+      <a href="/systemconfig" id="nav-systemconfig" data-label="System Configuration"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1679,8 +1755,7 @@
       </a>
 
       <!-- API Settings (Admin-only, PIN-gated) -->
-      <a href="#" id="nav-apisettings" data-label="API Settings"
-        onclick="showSection('apisettings'); return false;"
+      <a href="/apisettings" id="nav-apisettings" data-label="API Settings"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1693,8 +1768,7 @@
       </a>
 
       <!-- Managers -->
-      <a href="#" id="nav-managers" data-label="Managers"
-        onclick="showSection('managers'); return false;"
+      <a href="/managers" id="nav-managers" data-label="Managers"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1705,8 +1779,7 @@
       </a>
 
       <!-- Advisors -->
-      <a href="#" id="nav-advisors" data-label="Advisors"
-        onclick="showSection('advisors'); return false;"
+      <a href="/advisors" id="nav-advisors" data-label="Advisors"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1719,8 +1792,7 @@
       </a>
 
       <!-- Digital Visiting Cards -->
-      <a href="#" id="nav-digitalcard" data-label="Digital Cards"
-        onclick="showSection('digitalcard'); return false;"
+      <a href="/digitalcard" id="nav-digitalcard" data-label="Digital Cards"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1731,8 +1803,7 @@
       </a>
 
       <!-- Pending Approvals -->
-      <a href="#" id="nav-approvals" data-label="Pending Approvals"
-        onclick="showSection('approvals'); return false;"
+      <a href="/approvals" id="nav-approvals" data-label="Pending Approvals"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1743,9 +1814,75 @@
         <span id="nav-approval-badge" class="nav-badge approval-badge hidden">0</span>
       </a>
 
-      <!-- Financial Performance -->
-      <a href="/performance" id="nav-performance" data-label="Performance"
-        onclick="showSection('performance'); return false;"
+      <!-- FS_INSERT_NAV -->
+<!-- Payment Status (Admin) -->
+      <a href="/payment-status" id="nav-paymentstatus" data-label="Payment Status"
+        class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
+               hover:bg-slate-700 hover:text-white text-sm transition-colors">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+        </svg>
+        <span class="flex-1 nav-label">Payment Status</span>
+        <span id="nav-payment-status-badge" class="nav-badge approval-badge hidden">0</span>
+      </a>
+
+      <!-- Pending Advisor Approvals (Admin) -->
+      <a href="/advisor-approvals" id="nav-advisor-approvals" data-label="Pending Advisor Approvals"
+        class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
+               hover:bg-slate-700 hover:text-white text-sm transition-colors">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+        </svg>
+        <span class="flex-1 nav-label">Pending Advisor Approvals</span>
+        <span id="nav-advisor-approvals-badge" class="nav-badge approval-badge hidden">0</span>
+        <span class="nav-badge text-xs bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded font-medium">Admin</span>
+      </a>
+
+      <!-- Contest Management (Admin) -->
+      <a href="/contest-setup" id="nav-contest-setup" data-label="Contest Management"
+        class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
+               hover:bg-slate-700 hover:text-white text-sm transition-colors">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+        </svg>
+        <span class="flex-1 nav-label">Contest Management</span>
+        <span class="nav-badge text-xs bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded font-medium">Admin</span>
+      </a>
+
+      <!-- Contest (Manager) -->
+      <a href="/contest" id="nav-contest" data-label="Contest" style="display:none"
+        class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
+               hover:bg-slate-700 hover:text-white text-sm transition-colors">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0
+               3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806
+               1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0
+               01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42
+               0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42
+               3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+        </svg>
+        <span class="nav-label">Contest</span>
+      </a>
+
+      <!-- Payment Summary (Manager) -->
+      <a href="/payment-summary" id="nav-mgrpaymentsummary" data-label="Payment Summary"
+        class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
+               hover:bg-slate-700 hover:text-white text-sm transition-colors">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+        </svg>
+        <span class="flex-1 nav-label">Payment Summary</span>
+        <span id="nav-mgr-payment-badge" class="nav-badge approval-badge hidden">0</span>
+      </a>
+
+
+      <!-- Sales Performance -->
+      <a href="/performance" id="nav-performance" data-label="Sales Performance"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1754,12 +1891,11 @@
                0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2
                2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
         </svg>
-        <span class="nav-label">Performance</span>
+        <span class="nav-label">Sales Performance</span>
       </a>
 
       <!-- Commission Dashboard (Admin + Manager) -->
       <a href="/commissions/report" id="nav-commission-report" data-label="Commission Report"
-        onclick="showSection('commission-report'); return false;"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1773,7 +1909,6 @@
 
       <!-- Closed Sales -->
       <a href="/closedsales" id="nav-closedsales" data-label="Closed Sales"
-        onclick="showSection('closedsales'); return false;"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1790,8 +1925,7 @@
       </a>
 
       <!-- Commission Settings (Admin) -->
-      <a href="#" id="nav-commission" data-label="Commission"
-        onclick="showSection('commission'); return false;"
+      <a href="/commission-settings" id="nav-commission" data-label="Commission"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1805,8 +1939,7 @@
       </a>
 
       <!-- Product Settings -->
-      <a href="#" id="nav-settings" data-label="Product Settings"
-        onclick="showSection('settings'); return false;"
+      <a href="/settings" id="nav-settings" data-label="Product Settings"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1821,8 +1954,7 @@
       </a>
 
       <!-- Company Profile (Admin) -->
-      <a href="#" id="nav-company" data-label="Company Profile"
-        onclick="showSection('company'); return false;"
+      <a href="/company" id="nav-company" data-label="Company Profile"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1835,8 +1967,7 @@
       </a>
 
       <!-- Profile Settings (Admin) -->
-      <a href="#" id="nav-profile" data-label="Profile Settings"
-        onclick="showSection('profile'); return false;"
+      <a href="/profile" id="nav-profile" data-label="Profile Settings"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1849,8 +1980,7 @@
       </a>
 
       <!-- App Management (Admin) -->
-      <a href="#" id="nav-appmgmt" data-label="App Management"
-        onclick="showSection('appmgmt'); return false;"
+      <a href="/appmgmt" id="nav-appmgmt" data-label="App Management"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1862,8 +1992,7 @@
       </a>
 
       <!-- Role Permissions (Admin) -->
-      <a href="#" id="nav-permissions" data-label="Role Permissions"
-        onclick="showSection('permissions'); return false;"
+      <a href="/permissions" id="nav-permissions" data-label="Role Permissions"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1877,8 +2006,7 @@
       </a>
 
       <!-- Manager Qualification Exam (Admin) -->
-      <a href="#" id="nav-exammgmt" data-label="Exam Management"
-        onclick="showSection('exammgmt'); return false;"
+      <a href="/exammgmt" id="nav-exammgmt" data-label="Exam Management"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1890,8 +2018,7 @@
       </a>
 
       <!-- Certificate Settings (Admin) -->
-      <a href="#" id="nav-certsettings" data-label="Certificate Settings"
-        onclick="showSection('certsettings'); return false;"
+      <a href="/certsettings" id="nav-certsettings" data-label="Certificate Settings"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1903,8 +2030,7 @@
       </a>
 
       <!-- Manager Announcements / Offers (Admin) -->
-      <a href="#" id="nav-announcements" data-label="Announcements"
-        onclick="showSection('announcements'); return false;"
+      <a href="/announcements" id="nav-announcements" data-label="Announcements"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1916,8 +2042,7 @@
       </a>
 
       <!-- WhatsApp Bulk Messaging -->
-      <a href="#" id="nav-whatsapp" data-label="WhatsApp"
-        onclick="showSection('whatsapp'); return false;"
+      <a href="/whatsapp" id="nav-whatsapp" data-label="WhatsApp"
         class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300
                hover:bg-slate-700 hover:text-white text-sm transition-colors">
         <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
@@ -1945,14 +2070,14 @@
       <div id="sidebar-user-menu" class="user-menu-panel hidden" role="menu" aria-label="User menu">
 
         <!-- Profile Settings -->
-        <button onclick="showSection('profile'); window.closeUserMenus();"
+        <a href="/profile" onclick="window.closeUserMenus();"
           class="user-menu-item" role="menuitem">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
           </svg>
           Profile Settings
-        </button>
+        </a>
 
         <!-- Download APK -->
         <a id="sidebar-apk-link" href="/downloads/future-shield.apk" download="FutureShield.apk"
@@ -1975,7 +2100,7 @@
               d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
           </svg>
           Logout
-        </button>
+        </a>
       </div>
 
       <!-- ── Clickable user row ── -->
@@ -2119,14 +2244,14 @@
             </div>
 
             <!-- Profile Settings -->
-            <button onclick="showSection('profile'); window.closeUserMenus();"
+            <a href="/profile" onclick="window.closeUserMenus();"
               class="user-menu-item" role="menuitem">
               <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
               </svg>
               Profile Settings
-            </button>
+            </a>
 
             <!-- Download APK -->
             <a id="header-apk-link" href="/downloads/future-shield.apk" download="FutureShield.apk"
@@ -2158,10 +2283,16 @@
     <!-- ─────────────── PAGE BODY ─────────────── -->
     <main class="p-4 sm:p-6">
 
+      <!-- Neutral route loader (shown during section init — replaces dashboard flash) -->
+      <div id="page-route-loader" aria-live="polite" aria-busy="true">
+        <div class="page-route-spinner" role="status" aria-label="Loading"></div>
+        <p class="page-route-loader-text">Loading…</p>
+      </div>
+
       <!-- ═══════════════════════════════════════════════
-           SECTION: DASHBOARD (default active)
+           SECTION: DASHBOARD
       ═══════════════════════════════════════════════ -->
-      <div id="section-dashboard" class="dash-section active space-y-8">
+      <div id="section-dashboard" class="dash-section space-y-8">
 
         <!-- Stat Cards -->
         <section>
@@ -2169,7 +2300,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 
             <!-- Managers card (admin only) -->
-            <div id="dash-card-managers" onclick="showSection('managers')"
+            <a href="/managers" id="dash-card-managers"
               class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
                      hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group">
               <div class="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center
@@ -2184,10 +2315,10 @@
                 <p id="count-managers" class="text-3xl font-bold text-gray-800 mt-1">—</p>
                 <p class="text-xs text-green-500 mt-1 font-medium">Live from Firestore</p>
               </div>
-            </div>
+            </a>
 
             <!-- Advisors card -->
-            <div id="dash-card-advisors" onclick="showSection('advisors')"
+            <a href="/advisors" id="dash-card-advisors"
               class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
                      hover:shadow-md hover:border-purple-200 transition-all cursor-pointer group">
               <div class="w-14 h-14 rounded-xl bg-purple-50 flex items-center justify-center
@@ -2204,10 +2335,10 @@
                 <p id="count-advisors" class="text-3xl font-bold text-gray-800 mt-1">—</p>
                 <p id="dash-advisors-sub" class="text-xs text-green-500 mt-1 font-medium">Live from Firestore</p>
               </div>
-            </div>
+            </a>
 
             <!-- Leads card -->
-            <div id="dash-card-leads" onclick="showSection('leads')"
+            <a href="/leads" id="dash-card-leads"
               class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
                      hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group">
               <div class="w-14 h-14 rounded-xl bg-indigo-50 flex items-center justify-center
@@ -2222,10 +2353,10 @@
                 <p id="count-leads" class="text-3xl font-bold text-gray-800 mt-1">—</p>
                 <p id="dash-leads-sub" class="text-xs text-green-500 mt-1 font-medium">Live from Firestore</p>
               </div>
-            </div>
+            </a>
 
             <!-- Pending Approvals card — amber alert -->
-            <div id="dash-card-approvals" onclick="showSection('approvals')"
+            <a href="/approvals" id="dash-card-approvals"
               class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
                      hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group">
               <div class="w-14 h-14 rounded-xl bg-amber-50 flex items-center justify-center
@@ -2242,7 +2373,56 @@
                 <p id="count-approvals" class="text-3xl font-bold text-amber-600 mt-1">—</p>
                 <p id="dash-approvals-sub" class="text-xs text-amber-500 mt-1 font-medium">Awaiting admin review</p>
               </div>
-            </div>
+            </a>
+
+            <!-- FS_INSERT_DASH_TILES -->
+<!-- ═══════════════════════════════════════════════════════════════════
+     DASHBOARD TILES — insert into admin/manager dashboard grid
+═══════════════════════════════════════════════════════════════════ -->
+
+            <!-- Contest Progress card (admin) -->
+            <a href="/contest-progress" id="dash-card-contest-progress"
+              class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
+                     hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group">
+              <div class="w-14 h-14 rounded-xl bg-amber-50 flex items-center justify-center
+                          group-hover:bg-amber-100 transition-colors">
+                <svg class="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-sm text-gray-500 font-medium">Contest Progress</p>
+                <p id="dash-contest-progress-count" class="text-3xl font-bold text-amber-600 mt-1">—</p>
+                <p id="dash-contest-progress-sub" class="text-xs text-amber-500 mt-1 font-medium">Active contests</p>
+              </div>
+            </a>
+
+            <!-- Contest card (manager) -->
+            <a href="/contest" id="dash-card-contest" class="hidden
+              bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
+                     hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group">
+              <div class="w-14 h-14 rounded-xl bg-orange-50 flex items-center justify-center
+                          group-hover:bg-orange-100 transition-colors relative">
+                <svg class="w-7 h-7 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0
+                       3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806
+                       1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0
+                       01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42
+                       0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42
+                       3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+                </svg>
+                <span id="dash-contest-live-dot" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full
+                       bg-orange-500 border-2 border-white animate-ping"></span>
+              </div>
+              <div>
+                <p class="text-sm text-gray-500 font-medium">Sales Contest</p>
+                <p id="dash-contest-pct" class="text-3xl font-bold text-orange-600 mt-1">—</p>
+                <p id="dash-contest-sub" class="text-xs text-orange-500 mt-1 font-medium">Team progress</p>
+              </div>
+            </a>
+
 
             <!-- Total Approved Revenue card -->
             <div id="dash-card-revenue" class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
@@ -2264,7 +2444,7 @@
             </div>
 
             <!-- Closed Sales pending card -->
-            <div id="dash-card-closedsales" onclick="showSection('closedsales')"
+            <a href="/closedsales" id="dash-card-closedsales"
               class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
                      hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group">
               <div class="w-14 h-14 rounded-xl bg-indigo-50 flex items-center justify-center
@@ -2284,10 +2464,10 @@
                 <p id="count-closedsales" class="text-3xl font-bold text-indigo-600 mt-1">—</p>
                 <p id="dash-closedsales-sub" class="text-xs text-indigo-400 mt-1 font-medium">All submitted sales</p>
               </div>
-            </div>
+            </a>
 
             <!-- Total Commission Paid card -->
-            <div id="dash-card-commission" onclick="window.navigateToCommissions && window.navigateToCommissions()"
+            <a href="/commissions/report" id="dash-card-commission"
               class="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-5 border border-gray-100
                         hover:shadow-md hover:border-violet-200 transition-all cursor-pointer group">
               <div class="w-14 h-14 rounded-xl bg-violet-50 flex items-center justify-center">
@@ -2303,61 +2483,28 @@
                 <p id="count-commission-total" class="text-2xl font-bold text-violet-600 mt-1">₹ —</p>
                 <p id="dash-commission-sub" class="text-xs text-violet-400 mt-1 font-medium">Advisor + Manager paid</p>
               </div>
-            </div>
+            </a>
 
           </div>
         </section>
 
-        <!-- ── Today's Follow-ups Widget ────────────────────────── -->
-        <section id="followup-widget-section">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-3">
-              <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Today's Follow-ups</h2>
-              <span id="followup-widget-count"
-                class="hidden text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0</span>
-            </div>
-            <button onclick="showSection('followups')"
-              class="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
-              View all →
-            </button>
-          </div>
-
-          <!-- Widget card -->
-          <div class="followup-widget overflow-hidden">
-            <!-- Empty state -->
-            <div id="followup-widget-empty"
-              class="flex flex-col items-center justify-center py-8 gap-2">
-              <svg class="w-10 h-10 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-              <p class="text-sm text-gray-400">No follow-ups due today</p>
-            </div>
-            <!-- Follow-up list — rendered by JS -->
-            <div id="followup-widget-list"></div>
-          </div>
-        </section>
-
-        <!-- ── Financial Performance Tiles ───────────────────────── -->
-        <section>
+        <!-- ── Key Financial Metrics (Top) ─────────────────────── -->
+        <section id="dash-financial-summary">
           <div class="flex items-center justify-between mb-4">
             <div>
               <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Financial Performance</h2>
               <p id="dash-perf-period" class="text-xs text-gray-400 mt-0.5">Loading period…</p>
             </div>
-            <button onclick="showSection('performance')"
+            <a href="/performance"
               class="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors">
-              Full Report
+              Full Sales Performance Report
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
               </svg>
-            </button>
+            </a>
           </div>
 
-          <!-- 3 perf tiles: Sales, Agent Commission, Manager Commission -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-
-            <!-- Total Sales tile -->
             <div class="perf-card">
               <div class="perf-card-accent" style="background:linear-gradient(90deg,#6366f1,#818cf8)"></div>
               <div class="perf-title">
@@ -2386,7 +2533,6 @@
               </p>
             </div>
 
-            <!-- Agent Commission tile -->
             <div class="perf-card">
               <div class="perf-card-accent" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8)"></div>
               <div class="perf-title">
@@ -2396,7 +2542,7 @@
                       d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                   </svg>
                 </div>
-                Agent Commission
+                Advisor Commission
               </div>
               <div class="perf-metric-row">
                 <div class="perf-chip">
@@ -2412,7 +2558,6 @@
               <p class="text-xs text-gray-400 mt-2">Paid to all advisors (approved sales)</p>
             </div>
 
-            <!-- Manager Commission tile -->
             <div class="perf-card">
               <div class="perf-card-accent" style="background:linear-gradient(90deg,#a855f7,#c084fc)"></div>
               <div class="perf-title">
@@ -2442,13 +2587,9 @@
               </div>
               <p class="text-xs text-gray-400 mt-2">Override commissions earned by managers</p>
             </div>
-
           </div>
 
-          <!-- ── Charts row ─── -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-5">
-
-            <!-- Chart 1: Sales by Product Category -->
             <div class="chart-card">
               <div class="chart-card-title">
                 <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2470,7 +2611,6 @@
               <div id="legend-dash-product" class="chart-legend"></div>
             </div>
 
-            <!-- Chart 2: Commission Split (Advisor vs Manager) -->
             <div class="chart-card">
               <div class="chart-card-title">
                 <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2494,203 +2634,44 @@
               </div>
               <div id="legend-dash-commission" class="chart-legend"></div>
             </div>
-
           </div>
         </section>
 
-        <!-- ── Sales Forecasting Widget (Admin + Manager) ─────────── -->
-        <section id="sales-forecast-section" class="hidden">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <div>
-              <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Sales Forecasting</h2>
-              <p id="sf-period-label" class="text-xs text-gray-400 mt-0.5">Next 30 days · 6-month conversion trend</p>
-            </div>
-            <div id="sf-advisor-filter-wrap" class="hidden">
-              <label for="sf-advisor-filter" class="sr-only">Filter by team member</label>
-              <select id="sf-advisor-filter"
-                class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-300 outline-none"
-                onchange="window.renderSalesForecastWidget && window.renderSalesForecastWidget()">
-                <option value="">All team members</option>
-              </select>
-            </div>
-          </div>
-
-          <div id="sf-error-banner" class="hidden mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"></div>
-
-          <div id="sf-loading" class="hidden bg-white rounded-2xl border border-gray-100 p-8 text-center">
-            <div class="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3"></div>
-            <p class="text-xs text-gray-400">Calculating forecast…</p>
-          </div>
-
-          <div id="sf-content">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div class="perf-card">
-                <div class="perf-card-accent" style="background:linear-gradient(90deg,#059669,#34d399)"></div>
-                <div class="perf-title">
-                  <div class="perf-icon-wrap" style="background:#ecfdf5">
-                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                  </div>
-                  Projected Premium Revenue
-                </div>
-                <p id="sf-projected-revenue" class="text-2xl font-bold text-emerald-700 mt-2">₹ —</p>
-                <p id="sf-revenue-sub" class="text-xs text-gray-400 mt-1">Upcoming month estimate</p>
-              </div>
-
-              <div class="perf-card">
-                <div class="perf-card-accent" style="background:linear-gradient(90deg,#4f46e5,#818cf8)"></div>
-                <div class="perf-title">
-                  <div class="perf-icon-wrap" style="background:#eef2ff">
-                    <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                  </div>
-                  Estimated Closures
-                </div>
-                <p id="sf-estimated-closures" class="text-2xl font-bold text-indigo-700 mt-2">—</p>
-                <p id="sf-closures-sub" class="text-xs text-gray-400 mt-1">Predicted sales count</p>
-              </div>
-
-              <div class="perf-card">
-                <div class="perf-card-accent" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8)"></div>
-                <div class="perf-title">
-                  <div class="perf-icon-wrap" style="background:#e0f2fe">
-                    <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                    </svg>
-                  </div>
-                  Pipeline Volume
-                </div>
-                <p id="sf-pipeline-count" class="text-2xl font-bold text-sky-700 mt-2">—</p>
-                <p id="sf-pipeline-sub" class="text-xs text-gray-400 mt-1">Active + in-progress leads</p>
-              </div>
-
-              <div class="perf-card">
-                <div class="perf-card-accent" style="background:linear-gradient(90deg,#d97706,#fbbf24)"></div>
-                <div class="perf-title">
-                  <div class="perf-icon-wrap" style="background:#fffbeb">
-                    <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/>
-                    </svg>
-                  </div>
-                  Avg Conversion Rate
-                </div>
-                <p id="sf-conversion-rate" class="text-2xl font-bold text-amber-700 mt-2">—</p>
-                <p id="sf-conversion-sub" class="text-xs text-gray-400 mt-1">6-month lead → sale average</p>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
-              <div class="chart-card">
-                <div class="chart-card-title">
-                  <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                  </svg>
-                  30-Day Revenue Projection
-                </div>
-                <div class="chart-wrap" style="height:210px">
-                  <canvas id="chart-dash-forecast-revenue"></canvas>
-                  <div id="chart-dash-forecast-revenue-empty" class="chart-empty hidden">
-                    <p>Insufficient data for forecast chart</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="chart-card">
-                <div class="chart-card-title">
-                  <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                  </svg>
-                  30-Day Closure Projection
-                </div>
-                <div class="chart-wrap" style="height:210px">
-                  <canvas id="chart-dash-forecast-closures"></canvas>
-                  <div id="chart-dash-forecast-closures-empty" class="chart-empty hidden">
-                    <p>Insufficient data for forecast chart</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div id="sf-team-wrap" class="hidden mt-5">
-              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Team Member Forecast</h3>
-              <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="bg-gray-50 border-b border-gray-100">
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Team Member</th>
-                        <th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Pipeline</th>
-                        <th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Est. Closures</th>
-                        <th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Proj. Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody id="sf-team-table-body">
-                      <tr><td colspan="4" class="text-center py-8 text-gray-400 text-xs">No team data</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Recent Leads preview in dashboard -->
-        <section>
+        <!-- ── Today's Follow-ups (Bottom) ───────────────────────── -->
+        <section id="dash-followups-section">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Recent Leads</h2>
             <div class="flex items-center gap-3">
-              <span class="inline-flex items-center gap-1.5 text-xs text-green-600 font-medium bg-green-50 px-3 py-1 rounded-full">
-                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                Real-time
-              </span>
-              <button onclick="openAddLeadModal()"
-                class="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700
-                       text-white rounded-lg transition-colors">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Add Lead
-              </button>
+              <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Today's Follow-ups</h2>
+              <span id="followup-widget-count"
+                class="hidden text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0</span>
             </div>
+            <a href="/followups"
+              class="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
+              View all →
+            </a>
           </div>
           <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div id="followup-widget-empty"
+              class="flex flex-col items-center justify-center py-10 gap-2">
+              <svg class="w-10 h-10 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+              <p class="text-sm text-gray-400">No follow-ups scheduled for today</p>
+            </div>
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead>
                   <tr class="bg-gray-50 border-b border-gray-100">
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lead</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Product</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Manager</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Advisor</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned To</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
                   </tr>
                 </thead>
-                <tbody id="leads-table-body">
-                  <tr>
-                    <td colspan="10" class="text-center py-12 text-gray-400">
-                      <svg class="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                          d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0
-                             01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0
-                             01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                      </svg>
-                      Waiting for Firebase connection...
-                    </td>
-                  </tr>
-                </tbody>
+                <tbody id="dash-followups-table-body"></tbody>
               </table>
             </div>
           </div>
@@ -2913,7 +2894,7 @@
         <div id="wa-admin-config-hint" class="hidden mb-6 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
           <p class="text-sm font-medium text-indigo-900">WhatsApp server not configured</p>
           <p class="text-xs text-indigo-800 mt-1">
-            Open <button type="button" onclick="showSection('systemconfig')" class="font-semibold underline underline-offset-2 hover:text-indigo-950">System Configuration</button>
+            Open <a href="/systemconfig" class="font-semibold underline underline-offset-2 hover:text-indigo-950">System Configuration</a>
             to enter the server URL and secret token before sending messages.
           </p>
         </div>
@@ -3236,7 +3217,7 @@
                 </button>
               </div>
             </div>
-            <button onclick="openAddManagerModal()"
+            <button type="button" id="btn-add-manager" onclick="openAddManagerModal()"
               class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white
                      text-sm font-medium px-4 py-2.5 rounded-lg transition-colors shadow-sm whitespace-nowrap">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4492,7 +4473,7 @@
         <!-- Header -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h2 class="text-xl font-semibold text-gray-800">Financial Performance</h2>
+            <h2 class="text-xl font-semibold text-gray-800">Sales Performance</h2>
             <p id="perf-period-label" class="text-sm text-gray-500 mt-0.5">
               Company-wide · Approved Sales Only
             </p>
@@ -6262,6 +6243,327 @@
       </div>
       <!-- END SECTION: APPROVALS -->
 
+      <!-- FS_INSERT_SECTIONS -->
+<!-- ═══════════════════════════════════════════════
+           SECTION: PAYMENT STATUS (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-paymentstatus" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Payment Status</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Approve or reject commission payouts for closed sales. Transaction ID required for approval.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-teal-500 animate-pulse flex-shrink-0"></span>
+            <span class="text-xs font-semibold text-teal-700">
+              <span id="payment-status-pending-count">0</span> pending
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pending Payouts</p>
+            <p id="payment-status-pending-total" class="text-xl font-bold text-teal-600 mt-0.5">₹ 0</p>
+            <p class="text-xs text-gray-400">Total commission awaiting payment</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-teal-50 border-b border-teal-100">
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Customer</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Product</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Premium</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Advisor</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Adv. Comm.</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Manager</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Mgr. Comm.</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Advisor Payment</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Manager Payment</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Approved On</th>
+                </tr>
+              </thead>
+              <tbody id="payment-status-table-body">
+                <tr><td colspan="10" class="text-center py-14 text-gray-400 text-sm">No pending commission payments — all caught up!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: PENDING ADVISOR APPROVALS (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-advisor-approvals" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Pending Advisor Approvals</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Review manager-submitted advisor onboarding requests. Approve to activate or reject with remarks.
+            </p>
+          </div>
+        </div>
+
+        <div id="advisor-approvals-root">
+          <div class="text-center py-16 text-gray-400 text-sm">
+            <p class="font-medium text-gray-500">No pending advisor requests</p>
+            <p class="text-xs text-gray-400 mt-1">Manager-submitted advisors awaiting your review will appear here.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: CONTEST MANAGEMENT (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-contest-setup" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Contest Management</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Create and configure sales contests. Enable a contest to show it to managers.
+            </p>
+          </div>
+          <button type="button" id="btn-add-contest" onclick="window.addNewContest()"
+            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white
+                   bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add New Contest
+          </button>
+        </div>
+
+        <div id="contest-admin-list" class="mb-8">
+          <p class="text-sm text-gray-400 py-4">No contests yet. Click <strong>Add New Contest</strong> to create one.</p>
+        </div>
+
+        <div id="contest-editor-empty" class="bg-white rounded-2xl border border-dashed border-gray-200 px-6 py-12 text-center">
+          <p class="text-sm text-gray-500 font-medium">Select a contest from the list or create a new one to edit.</p>
+          <p class="text-xs text-gray-400 mt-1">Contest details, targets, and images are configured here.</p>
+        </div>
+
+        <div id="contest-editor-panel" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+          <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-base font-semibold text-gray-800">Edit Contest</h3>
+              <p id="contest-editor-status" class="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-0.5">Disabled — hidden from managers</p>
+            </div>
+            <label class="contest-toggle inline-flex items-center gap-2" title="Enable or disable this contest">
+              <span class="text-xs font-medium text-gray-500">Active</span>
+              <input type="checkbox" id="contest-editor-active-toggle"
+                onchange="window.handleContestActiveToggle(event)" />
+              <span class="contest-toggle-slider" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <div class="px-6 py-5 space-y-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="sm:col-span-2">
+                <label for="contest-title" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Contest Title</label>
+                <input type="text" id="contest-title" class="form-field" placeholder="e.g. Q2 Sales Sprint" />
+              </div>
+              <div class="sm:col-span-2">
+                <label for="contest-description" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                <textarea id="contest-description" rows="3" class="form-field resize-none"
+                  placeholder="Contest rules, prizes, and motivation…"></textarea>
+              </div>
+              <div>
+                <label for="contest-advisor-target" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Advisor Target</label>
+                <input type="number" id="contest-advisor-target" class="form-field" min="1" step="1" placeholder="e.g. 10" />
+              </div>
+              <div>
+                <label for="contest-manager-target" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Manager Target</label>
+                <input type="number" id="contest-manager-target" class="form-field" min="1" step="1" placeholder="e.g. 50" />
+              </div>
+              <div>
+                <label for="contest-start-date" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Date</label>
+                <input type="date" id="contest-start-date" class="form-field" />
+              </div>
+              <div>
+                <label for="contest-end-date" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">End Date</label>
+                <input type="date" id="contest-end-date" class="form-field" />
+              </div>
+            </div>
+
+            <div>
+              <p class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Success Criteria</p>
+              <div class="flex flex-wrap gap-4">
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input type="radio" name="contest-criteria" value="sales_count" class="text-indigo-600" checked />
+                  Sales Count
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input type="radio" name="contest-criteria" value="sales_amount" class="text-indigo-600" />
+                  Sales Amount (Premium)
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <p class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Contest Image</p>
+              <div class="flex flex-wrap items-start gap-4">
+                <div class="relative w-32 h-32 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+                  <img id="contest-image-preview" src="" alt="Contest preview" class="hidden w-full h-full object-cover" />
+                  <span id="contest-image-placeholder" class="text-xs text-gray-400 text-center px-2">No image</span>
+                </div>
+                <div class="flex flex-col gap-2">
+                  <input type="file" id="contest-image-input" accept="image/*" class="text-sm text-gray-600"
+                    onchange="window.handleContestImageSelect(event)" />
+                  <button type="button" id="contest-image-clear" class="hidden text-xs text-red-600 hover:text-red-700 font-medium"
+                    onclick="window.clearContestImageDraft()">Remove image</button>
+                  <p id="err-contest-image" class="text-xs text-red-500 hidden"></p>
+                  <p class="text-xs text-gray-400">Max 900 KB · JPG or PNG recommended</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <button type="button" id="btn-save-contest" onclick="window.saveContestSettings()"
+              class="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
+                     bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm disabled:opacity-60">
+              <svg id="contest-save-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Save Contest
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: CONTEST PROGRESS (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-contest-progress" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Contest Progress</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Live leaderboard and team progress across active contests.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="contest-progress-manager-filter" class="text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Manager</label>
+            <select id="contest-progress-manager-filter" class="form-field min-w-[180px]"
+              onchange="window.onContestProgressManagerFilterChange(event)">
+              <option value="">All Managers</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="contest-progress-root">
+          <div class="text-center py-16 text-gray-400 text-sm">Loading contest progress…</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: CONTEST (Manager)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-contest" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Sales Contest</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Track your team's progress toward contest targets.
+            </p>
+          </div>
+        </div>
+
+        <div id="contest-manager-root">
+          <div class="text-center py-16 text-gray-400 text-sm">No active contest at the moment.</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: PAYMENT SUMMARY (Manager)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-mgrpaymentsummary" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Payment Summary</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Commission payment status for your team. Send reminders to admin for pending payouts.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+            <span class="text-xs font-semibold text-amber-700">
+              <span id="mgr-payment-page-pending-count">0</span> pending for your team
+            </span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 mb-4">
+          <button id="mgr-payment-tab-pending" type="button" class="subtab-btn active"
+            onclick="window.switchManagerPaymentTab('pending')">
+            Pending
+            <span id="mgr-payment-pending-count" class="ml-1 text-xs opacity-80">(0)</span>
+          </button>
+          <button id="mgr-payment-tab-success" type="button" class="subtab-btn"
+            onclick="window.switchManagerPaymentTab('success')">
+            Processed
+            <span id="mgr-payment-success-count" class="ml-1 text-xs opacity-80">(0)</span>
+          </button>
+        </div>
+
+        <div id="mgr-payment-pending-panel">
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="bg-amber-50 border-b border-amber-100">
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Customer</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Payee</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Role</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider whitespace-nowrap">Commission</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider whitespace-nowrap">Days Pending</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider whitespace-nowrap">Premium</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="mgr-payment-pending-body">
+                  <tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm">No pending commission payments for your team</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="mgr-payment-success-panel" class="hidden">
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="bg-emerald-50 border-b border-emerald-100">
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider">Customer</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider">Payee</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider">Role</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider whitespace-nowrap">Commission</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider whitespace-nowrap">Transaction ID</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider whitespace-nowrap">Processed On</th>
+                  </tr>
+                </thead>
+                <tbody id="mgr-payment-success-body">
+                  <tr><td colspan="6" class="text-center py-10 text-gray-400 text-sm">No processed payments yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
 
       <!-- ═══════════════════════════════════════════════
            SECTION: PRODUCT SETTINGS  ← NEW
@@ -7509,6 +7811,154 @@
   </div>
 
 
+  <!-- FS_INSERT_MODALS -->
+  <!-- ═══════════════════════════════════════════════════════════════════
+       PAYMENT APPROVE MODAL
+  ═══════════════════════════════════════════════════════════════════ -->
+  <div id="modal-payment-approve" class="modal-overlay hidden" role="dialog" aria-modal="true"
+       aria-labelledby="payment-approve-title">
+    <div class="modal-box" style="max-width:460px">
+      <div class="px-6 pt-6 pb-4 border-b border-emerald-50 flex items-start justify-between gap-3">
+        <div>
+          <h3 id="payment-approve-title" class="text-lg font-semibold text-gray-800">Approve Commission Payment</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Enter the bank transaction ID to confirm payout</p>
+        </div>
+        <button type="button" onclick="window.closePaymentApproveModal()" aria-label="Close"
+          class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <form id="payment-approve-form" class="px-6 py-5 space-y-4"
+            onsubmit="window.submitPaymentApprove(event)" novalidate>
+        <input type="hidden" id="payment-approve-sale-id" value="" />
+        <input type="hidden" id="payment-approve-role" value="" />
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+          <p class="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-1">Customer</p>
+          <p id="payment-approve-customer" class="text-sm font-semibold text-emerald-900">—</p>
+          <p id="payment-approve-role-label" class="text-xs text-emerald-600 mt-1 font-medium">—</p>
+          <p id="payment-approve-amount" class="text-sm font-bold text-emerald-800 mt-1">—</p>
+        </div>
+        <div>
+          <label for="payment-approve-txn-id" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            Transaction ID <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="payment-approve-txn-id" class="form-field font-mono"
+            placeholder="e.g. UTR / NEFT reference number" autocomplete="off" />
+        </div>
+      </form>
+      <div class="px-6 pb-6 flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
+        <button type="button" onclick="window.closePaymentApproveModal()"
+          class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
+        <button type="submit" form="payment-approve-form" id="btn-payment-approve"
+          class="btn-approve flex items-center gap-2 px-5 py-2 text-sm !font-medium disabled:opacity-60">
+          <svg id="payment-approve-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          Approve Payment
+        </button>
+      </div>
+    </div>
+  </div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PAYMENT REJECT MODAL
+═══════════════════════════════════════════════════════════════════ -->
+  <div id="modal-payment-reject" class="modal-overlay hidden" role="dialog" aria-modal="true"
+       aria-labelledby="payment-reject-title">
+    <div class="modal-box" style="max-width:460px">
+      <div class="px-6 pt-6 pb-4 border-b border-red-50 flex items-start justify-between gap-3">
+        <div>
+          <h3 id="payment-reject-title" class="text-lg font-semibold text-gray-800">Reject Commission Payment</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Provide a reason for rejecting this payout</p>
+        </div>
+        <button type="button" onclick="window.closePaymentRejectModal()" aria-label="Close"
+          class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <form id="payment-reject-form" class="px-6 py-5 space-y-4"
+            onsubmit="window.submitPaymentReject(event)" novalidate>
+        <input type="hidden" id="payment-reject-sale-id" value="" />
+        <input type="hidden" id="payment-reject-role" value="" />
+        <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p class="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Customer</p>
+          <p id="payment-reject-customer" class="text-sm font-semibold text-red-900">—</p>
+          <p id="payment-reject-role-label" class="text-xs text-red-500 mt-1 font-medium">—</p>
+          <p id="payment-reject-amount" class="text-sm font-bold text-red-800 mt-1">—</p>
+        </div>
+        <div>
+          <label for="payment-reject-reason" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            Rejection Reason <span class="text-red-400">*</span>
+          </label>
+          <textarea id="payment-reject-reason" rows="3" class="form-field resize-none"
+            placeholder="Explain why this payment is being rejected…"></textarea>
+        </div>
+      </form>
+      <div class="px-6 pb-6 flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
+        <button type="button" onclick="window.closePaymentRejectModal()"
+          class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
+        <button type="submit" form="payment-reject-form" id="btn-payment-reject"
+          class="btn-reject flex items-center gap-2 px-5 py-2 text-sm !font-medium disabled:opacity-60">
+          <svg id="payment-reject-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          Reject Payment
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     ADVISOR APPROVAL ACTION MODAL
+═══════════════════════════════════════════════════════════════════ -->
+  <div id="modal-advisor-approval-action" class="modal-overlay hidden" role="dialog" aria-modal="true"
+       aria-labelledby="advisor-approval-modal-title">
+    <div class="modal-box" style="max-width:480px">
+      <div class="px-6 pt-6 pb-4 border-b border-gray-100 flex items-start justify-between gap-3">
+        <div>
+          <h3 id="advisor-approval-modal-title" class="text-lg font-semibold text-gray-800">Advisor Action</h3>
+          <p id="advisor-approval-modal-subtitle" class="text-sm text-gray-500 mt-0.5"></p>
+        </div>
+        <button type="button" onclick="window.closeAdvisorApprovalActionModal()" aria-label="Close"
+          class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <form id="advisor-approval-form" class="px-6 py-5 space-y-4"
+            onsubmit="window.submitAdvisorApprovalAction(event)" novalidate>
+        <div>
+          <label for="advisor-approval-remarks" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            Remarks
+          </label>
+          <textarea id="advisor-approval-remarks" rows="3" class="form-field resize-none"
+            placeholder="Optional remarks for internal records…"></textarea>
+        </div>
+      </form>
+      <div class="px-6 pb-6 flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
+        <button type="button" onclick="window.closeAdvisorApprovalActionModal()"
+          class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
+        <button type="submit" form="advisor-approval-form" id="btn-advisor-approval-submit"
+          class="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-60">
+          <svg id="advisor-approval-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          Submit
+        </button>
+      </div>
+    </div>
+  </div>
+
+
   <!-- ═══════════════════════════════════════════════════════════════════
        ADD MANAGER MODAL
   ═══════════════════════════════════════════════════════════════════ -->
@@ -7626,6 +8076,37 @@
           </label>
           <input id="mgr-designation" type="text" class="form-field"
             placeholder="e.g. Regional Manager" />
+        </div>
+
+        <!-- ── Bank Details ── -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="mgr-bank-name" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Bank Name
+            </label>
+            <select id="mgr-bank-name" class="form-field" onchange="clearFieldError('mgr-bank-name')">
+              <option value="">— Select bank —</option>
+            </select>
+            <p id="err-mgr-bank-name" class="text-xs text-red-500 mt-1 hidden"></p>
+          </div>
+          <div>
+            <label for="mgr-bank-account" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Account Number
+            </label>
+            <input id="mgr-bank-account" type="text" class="form-field font-mono"
+              placeholder="9–18 digit account number" inputmode="numeric" maxlength="18"
+              oninput="clearFieldError('mgr-bank-account')" />
+            <p id="err-mgr-bank-account" class="text-xs text-red-500 mt-1 hidden"></p>
+          </div>
+          <div class="sm:col-span-2">
+            <label for="mgr-bank-ifsc" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              IFSC Code
+            </label>
+            <input id="mgr-bank-ifsc" type="text" class="form-field font-mono uppercase"
+              placeholder="e.g. HDFC0001234" maxlength="11"
+              oninput="this.value=this.value.toUpperCase(); clearFieldError('mgr-bank-ifsc')" />
+            <p id="err-mgr-bank-ifsc" class="text-xs text-red-500 mt-1 hidden"></p>
+          </div>
         </div>
 
         <!-- ── Username + Password ── -->
@@ -8350,6 +8831,37 @@
           <p id="err-adv-mobile" class="text-xs text-red-500 mt-1 hidden"></p>
         </div>
 
+        <!-- ── Bank Details ── -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="adv-bank-name" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Bank Name
+            </label>
+            <select id="adv-bank-name" class="form-field" onchange="clearFieldError('adv-bank-name')">
+              <option value="">— Select bank —</option>
+            </select>
+            <p id="err-adv-bank-name" class="text-xs text-red-500 mt-1 hidden"></p>
+          </div>
+          <div>
+            <label for="adv-bank-account" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Account Number
+            </label>
+            <input id="adv-bank-account" type="text" class="form-field font-mono"
+              placeholder="9–18 digit account number" inputmode="numeric" maxlength="18"
+              oninput="clearFieldError('adv-bank-account')" />
+            <p id="err-adv-bank-account" class="text-xs text-red-500 mt-1 hidden"></p>
+          </div>
+          <div class="sm:col-span-2">
+            <label for="adv-bank-ifsc" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              IFSC Code
+            </label>
+            <input id="adv-bank-ifsc" type="text" class="form-field font-mono uppercase"
+              placeholder="e.g. HDFC0001234" maxlength="11"
+              oninput="this.value=this.value.toUpperCase(); clearFieldError('adv-bank-ifsc')" />
+            <p id="err-adv-bank-ifsc" class="text-xs text-red-500 mt-1 hidden"></p>
+          </div>
+        </div>
+
         <!-- ── Manager Selection (Admin only — searchable dropdown) ── -->
         <div id="adv-manager-field-section">
           <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
@@ -8728,7 +9240,7 @@
     import { initializeApp } from
       "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore,
+      initializeFirestore,
       collection,
       onSnapshot,
       query,
@@ -8740,6 +9252,7 @@
       getDoc,
       updateDoc,
       deleteDoc,
+      deleteField,
       serverTimestamp,
       getDocs,
       getCountFromServer,
@@ -8758,12 +9271,32 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
+    // Auto-detect long polling — avoids WebChannel transport errors on some networks/proxies
+    const db  = initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    });
 
-    // Mark Firebase as connected in the UI
-    document.getElementById("fb-status").textContent = "Connected";
-    document.getElementById("fb-status").className =
-      "text-xs px-3 py-1 rounded-full bg-green-100 text-green-700 font-medium";
+    /** Consistent error logging for realtime listeners */
+    function firestoreListenError(label, err) {
+      const code = err?.code || "unknown";
+      const msg  = err?.message || String(err);
+      console.error("[Firestore] Listen failed (" + label + "):", code, msg);
+      const status = document.getElementById("fb-status");
+      if (status && code !== "cancelled") {
+        status.textContent = "Sync issue";
+        status.className =
+          "text-xs px-3 py-1 rounded-full bg-amber-100 text-amber-800 font-medium";
+        status.title = label + ": " + msg;
+      }
+    }
+    window._markFirestoreConnected = function () {
+      const status = document.getElementById("fb-status");
+      if (!status) return;
+      status.textContent = "Connected";
+      status.className =
+        "text-xs px-3 py-1 rounded-full bg-green-100 text-green-700 font-medium";
+      status.title = "";
+    };
 
     // ── XSS-safe HTML escape ─────────────────────────────────────────────
     function esc(s) {
@@ -8776,6 +9309,52 @@
     }
     // Expose esc for Firebase module onSnapshot builders
     window._esc = esc;
+
+    const _fsUi = {
+      esc,
+      showToast: (msg, type) => window.showToast?.(msg, type),
+      showFieldError: (id, msg) => window.showFieldError?.(id, msg),
+      clearFieldError: (id) => window.clearFieldError?.(id),
+      createNotification: (...args) => createNotification(...args),
+    };
+    const _fsDb = {
+      collection, doc, setDoc, addDoc, updateDoc, deleteDoc, deleteField,
+      serverTimestamp, onSnapshot, getDoc, getDocs, where, query, orderBy,
+    };
+
+    if (typeof window.initProductCommissionSettings === "function") {
+      window.initProductCommissionSettings(db, _fsDb, _fsUi);
+    }
+    if (typeof window.initContestManagement === "function") {
+      window.initContestManagement(db, _fsDb, _fsUi);
+    }
+    if (typeof window.initPaymentApproval === "function") {
+      window.initPaymentApproval(db, { doc, updateDoc, serverTimestamp }, _fsUi);
+    }
+    if (typeof window.initManagerPaymentSummary === "function") {
+      window.initManagerPaymentSummary(db, { doc, updateDoc, serverTimestamp }, _fsUi);
+    }
+    window._approvePendingAdvisorDoc = async function (advisorId, remarks) {
+      await updateDoc(doc(db, "advisors", advisorId), {
+        status: "Active",
+        disabled: false,
+        approvalRemarks: remarks || "",
+        approvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    };
+    window._rejectPendingAdvisorDoc = async function (advisorId, remarks) {
+      await updateDoc(doc(db, "advisors", advisorId), {
+        status: "Rejected",
+        disabled: true,
+        rejectionRemarks: remarks,
+        rejectionNotified: false,
+        updatedAt: serverTimestamp(),
+      });
+    };
+    window._markAdvisorRejectionNotified = async function (advisorId) {
+      await updateDoc(doc(db, "advisors", advisorId), { rejectionNotified: true });
+    };
 
     // ── Format Firestore Timestamp or date string ────────────────────────
     function formatDate(value) {
@@ -8825,6 +9404,7 @@
      * Checks system_admins, then managers, then advisors.
      */
     window.authenticateUser = async function (username, password) {
+      try {
       const hash = await hashPassword(password);
 
       const adminRef  = doc(db, "system_admins", username.toLowerCase());
@@ -8888,6 +9468,10 @@
       }
 
       return null;
+      } catch (err) {
+        console.error("[Auth] authenticateUser failed:", err);
+        return { error: "Authentication failed. Please try again." };
+      }
     };
 
     window._firebaseAuthReady = true;
@@ -8917,6 +9501,88 @@
     window._dashCountCache = { key: null, advisors: null, leads: null, at: 0 };
     window._dashCountsExact = { advisors: false, leads: false };
     const DASH_COUNT_TTL_MS = 60000;
+    const DASH_SESSION_CACHE_KEY = "fs_dash_session_v1";
+    const DASH_SESSION_TTL_MS = 120000;
+
+    function slimClosedSaleForCache(s) {
+      return {
+        id: s.id,
+        premiumAmount: s.premiumAmount,
+        approvalStatus: s.approvalStatus,
+        productCategory: s.productCategory,
+        advisorCommission: s.advisorCommission,
+        managerCommission: s.managerCommission,
+        managerId: s.managerId,
+        ownerManagerId: s.ownerManagerId,
+        submittedAt: s.submittedAt,
+        saleDate: s.saleDate,
+        customerName: s.customerName,
+      };
+    }
+
+    window.persistDashboardSessionCache = function () {
+      try {
+        const session = window._session;
+        if (!session?.role) return;
+        const payload = {
+          at: Date.now(),
+          role: session.role,
+          managerId: session.managerId || null,
+          sales: (window._closedSalesCache || []).map(slimClosedSaleForCache),
+          counts: {
+            advisors: window._dashCountCache?.advisors,
+            leads: window._dashCountCache?.leads,
+            managers: Array.isArray(window._managersCache) ? window._managersCache.length : null,
+          },
+        };
+        sessionStorage.setItem(DASH_SESSION_CACHE_KEY, JSON.stringify(payload));
+      } catch (_) { /* quota or private mode */ }
+    };
+
+    window.hydrateDashboardSessionCache = function () {
+      try {
+        const session = window._session;
+        if (!session?.role) return false;
+        const raw = sessionStorage.getItem(DASH_SESSION_CACHE_KEY);
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        if (!data?.at || (Date.now() - data.at) > DASH_SESSION_TTL_MS) return false;
+        if (data.role !== session.role) return false;
+        if (session.role === "manager" && data.managerId !== session.managerId) return false;
+
+        if (Array.isArray(data.sales) && data.sales.length) {
+          window._closedSalesCache = data.sales;
+        }
+        if (data.counts) {
+          window._dashCountCache = {
+            key: dashCountCacheKey(session),
+            advisors: data.counts.advisors,
+            leads: data.counts.leads,
+            at: data.at,
+          };
+          if (session.role === "admin" && data.counts.managers != null) {
+            const countEl = document.getElementById("count-managers");
+            if (countEl) countEl.textContent = String(data.counts.managers);
+          }
+        }
+
+        if (typeof window.refreshDashboardSummaryTiles === "function") {
+          window.refreshDashboardSummaryTiles();
+        }
+        if (typeof window.updatePerformanceTiles === "function") {
+          window.updatePerformanceTiles();
+        }
+        if (typeof window.updateAdminCharts === "function") {
+          window.updateAdminCharts();
+        }
+        if (typeof window.renderFollowUpWidget === "function") {
+          window.renderFollowUpWidget();
+        }
+        return !!(data.sales?.length || data.counts);
+      } catch (_) {
+        return false;
+      }
+    };
 
     async function firestoreAggregateCount(q) {
       const snap = await getCountFromServer(q);
@@ -9026,12 +9692,16 @@
           && (now - (cache.at || 0)) < DASH_COUNT_TTL_MS) {
         applyDashboardCountTile("count-advisors", cache.advisors);
         applyDashboardCountTile("count-leads", cache.leads);
-        console.info("[Dashboard] tile counts from cache", { advisors: cache.advisors, leads: cache.leads });
         return;
       }
 
-      window.setDashboardTileLoading("count-advisors", true);
-      window.setDashboardTileLoading("count-leads", true);
+      if (cache.advisors != null && cache.leads != null) {
+        applyDashboardCountTile("count-advisors", cache.advisors);
+        applyDashboardCountTile("count-leads", cache.leads);
+      } else {
+        window.setDashboardTileLoading("count-advisors", true);
+        window.setDashboardTileLoading("count-leads", true);
+      }
 
       const advisorTask = fetchAdvisorCountForScope(session)
         .then((n) => {
@@ -9070,6 +9740,9 @@
       await Promise.allSettled([advisorTask, leadsTask]);
       window._dashCountCache.key = cacheKey;
       window._dashCountCache.at = now;
+      if (typeof window.persistDashboardSessionCache === "function") {
+        window.persistDashboardSessionCache();
+      }
     };
 
     window.ADMIN_LEAD_OWNER = "__admin__";
@@ -9140,7 +9813,10 @@
     /** Active advisors visible to the current dashboard scope. */
     window.getScopedAdvisors = function () {
       const scopeId = window.getDashboardScopeId();
-      const all = (window._advisorsCache || []).filter(a => !a.disabled);
+      const all = (window._advisorsCache || []).filter(a => {
+        if (typeof window.isAdvisorActive === "function") return window.isAdvisorActive(a);
+        return !a.disabled;
+      });
       if (!scopeId) return all;
       return all.filter(a => window.advisorBelongsToManager(a, scopeId));
     };
@@ -9188,8 +9864,9 @@
     window.refreshAllDashboardData = async function (opts = {}) {
       const skipTileCounts = opts.skipTileCounts === true;
       const forceTileCounts = opts.forceTileCounts !== false;
-      console.info("[Dashboard] refreshAllDashboardData — start");
-      window.setDashboardTilesLoading(true);
+      const hasCachedSales = (window._closedSalesCache || []).length > 0;
+      const showLoading = !hasCachedSales;
+      if (showLoading) window.setDashboardTilesLoading(true);
       try {
         const tasks = [];
         if (typeof window.ensureCommissionRulesLoaded === "function") {
@@ -9198,7 +9875,7 @@
         if (!skipTileCounts && typeof window.fetchDashboardTileCounts === "function") {
           tasks.push(window.fetchDashboardTileCounts({ force: forceTileCounts }));
         }
-        if (typeof window.reloadClosedSalesCache === "function") {
+        if (!hasCachedSales && typeof window.reloadClosedSalesCache === "function") {
           tasks.push(window.reloadClosedSalesCache({ skipCommissionRefresh: true }));
         }
         await Promise.all(tasks);
@@ -9210,11 +9887,13 @@
         } else if (typeof window.refreshDashboardSummaryTiles === "function") {
           window.refreshDashboardSummaryTiles();
         }
-        console.info("[Dashboard] refreshAllDashboardData — complete");
+        if (typeof window.persistDashboardSessionCache === "function") {
+          window.persistDashboardSessionCache();
+        }
       } catch (err) {
         console.error("[Dashboard] refreshAllDashboardData failed:", err);
       } finally {
-        window.setDashboardTilesLoading(false);
+        if (showLoading) window.setDashboardTilesLoading(false);
       }
     };
 
@@ -9441,9 +10120,7 @@
     }
 
     function renderLeadsTableShell(innerHtml) {
-      const preview = document.getElementById("leads-table-body");
       const full = document.getElementById("leads-table-body-full");
-      if (preview) preview.innerHTML = innerHtml;
       if (full) full.innerHTML = innerHtml;
     }
 
@@ -9586,14 +10263,6 @@
           }
         } catch (fupErr) {
           console.error("renderFollowUpWidget after leads load:", fupErr);
-        }
-
-        try {
-          if (typeof window.renderSalesForecastWidget === "function") {
-            window.renderSalesForecastWidget();
-          }
-        } catch (sfErr) {
-          console.error("renderSalesForecastWidget after leads load:", sfErr);
         }
 
         try {
@@ -9788,17 +10457,22 @@
     /** @deprecated — use ensureDashboardCounts */
     window.ensureManagerDashboardCounts = window.ensureDashboardCounts;
 
+    window.syncManagerCountDisplay = function () {
+      if (window._session?.role !== "admin") return;
+      const countEl = document.getElementById("count-managers");
+      if (!countEl || countEl.dataset.dashLoading === "1") return;
+      const cache = window._managersCache;
+      if (Array.isArray(cache)) countEl.textContent = String(cache.length);
+      if (typeof window.persistDashboardSessionCache === "function") {
+        window.persistDashboardSessionCache();
+      }
+    };
+
     // ── REAL-TIME: managers collection ───────────────────────────────────
     // Also maintains window._managersCache so the Add Advisor modal can
     // build its searchable dropdown from live data without an extra query.
     onSnapshot(collection(db, "managers"), (snap) => {
-      if (window._session?.role === "admin") {
-        const countEl = document.getElementById("count-managers");
-        if (countEl) countEl.textContent = snap.size;
-      }
-
-      // Full manager cache — used by the advisor dropdown AND the detail/edit views.
-      // Keeping all fields here avoids an extra getDoc call when opening Detail/Edit modals.
+      window._markFirestoreConnected?.();
       window._managersCache = snap.docs.map(d => {
         const data = d.data();
         return {
@@ -9827,6 +10501,8 @@
           cardBranch:   data.cardBranch    || "",
         };
       });
+
+      if (typeof window.syncManagerCountDisplay === "function") window.syncManagerCountDisplay();
 
       if (typeof window.applyFeatureFlags === "function") window.applyFeatureFlags();
       if (typeof window.applyDigitalCardAccessUI === "function") window.applyDigitalCardAccessUI();
@@ -9921,7 +10597,7 @@
           </td>
         </tr>`;
       }).join("");
-    });
+    }, (err) => firestoreListenError("managers", err));
 
     // ── REAL-TIME: advisors collection (role-scoped listener) ─────────────
     window._advisorsUnsubscribe = null;
@@ -10053,7 +10729,10 @@
 
       window._advisorsCache = docs.map(d => {
         const data = d.data();
-        return {
+        const normalized = typeof window.normalizeAdvisorFromData === "function"
+          ? window.normalizeAdvisorFromData(d.id, data)
+          : null;
+        return normalized || {
           id:           d.id,
           name:         data.name         || "",
           mobile:       data.mobile        || "",
@@ -10061,6 +10740,10 @@
           managerName:  data.managerName   || "",
           managerEmpId: data.managerEmpId  || "",
           disabled:     data.disabled === true,
+          status:       data.status        || (data.disabled ? "Inactive" : "Active"),
+          bankName:     data.bankName      || "",
+          bankAccountNumber: data.bankAccountNumber || "",
+          bankIfsc:     data.bankIfsc      || "",
           createdAt:    data.createdAt,
           cardEnabled:  data.cardEnabled === true,
           cardSlug:     data.cardSlug      || "",
@@ -10073,6 +10756,14 @@
           username:     data.username      || "",
         };
       });
+
+      if (typeof window.updatePendingAdvisorApprovalBadge === "function") {
+        window.updatePendingAdvisorApprovalBadge();
+      }
+      const advApprovalsSec = document.getElementById("section-advisor-approvals");
+      if (advApprovalsSec?.classList.contains("active") && typeof window.renderPendingAdvisorApprovalsPage === "function") {
+        window.renderPendingAdvisorApprovalsPage();
+      }
 
       const scopedAdvisors = typeof window.getScopedAdvisors === "function"
         ? window.getScopedAdvisors()
@@ -10308,10 +10999,14 @@
         const advisorDoc = {
           name:         document.getElementById("adv-name").value.trim(),
           mobile:       document.getElementById("adv-mobile").value.trim(),
+          bankName:     document.getElementById("adv-bank-name")?.value.trim() || "",
+          bankAccountNumber: document.getElementById("adv-bank-account")?.value.trim() || "",
+          bankIfsc:     (document.getElementById("adv-bank-ifsc")?.value.trim() || "").toUpperCase(),
           managerId:    canonicalManagerId,
           managerName:  canonicalManagerName,
           managerEmpId: canonicalManagerEmpId,
-          disabled:     false,
+          status:       session.role === "manager" ? "Pending" : "Active",
+          disabled:     session.role === "manager",
           createdAt:    serverTimestamp(),
           createdByRole: session.role || "admin",
           createdById: session.role === "manager" ? session.managerId : "admin",
@@ -10320,7 +11015,7 @@
         await addDoc(collection(db, "advisors"), advisorDoc);
         window.showToast(
           forced
-            ? `Advisor added under your team (${canonicalManagerName}).`
+            ? `Advisor submitted for admin approval (${canonicalManagerName}).`
             : "Advisor added and linked to manager successfully!",
           "success"
         );
@@ -11281,10 +11976,7 @@
         window.showToast("Digital card access is not enabled for your account.", "error");
         return;
       }
-      showSection("digitalcard");
-      const val = "a:" + advisorId;
-      window.populateCardAdvisorSelect(val);
-      window.onCardSelectChange(val);
+      window.navigateToSection("digitalcard", { cardAdvisor: "a:" + advisorId });
     };
 
     window.handleCardPhotoSelect = function (e) {
@@ -11715,7 +12407,7 @@
           </td>
         </tr>`;
       }).join("");
-    });
+    }, (err) => firestoreListenError("pending-approvals", err));
 
     // ── REAL-TIME: closed (approved) leads for revenue totals ─────────────
     const closedQ = query(
@@ -11728,7 +12420,7 @@
       if (typeof window.refreshDashboardSummaryTiles === "function") {
         window.refreshDashboardSummaryTiles();
       }
-    });
+    }, (err) => firestoreListenError("approved-leads", err));
 
     // ── PATCH /api/leads/:id/close — sale confirmation + closed_sales record ─
     window._closeLeadDraft = null;
@@ -13329,10 +14021,11 @@
         type: "customer",
       };
       window._waPrefillMessage = window.buildRenewalWhatsAppMessage(sale);
-      if (typeof showSection === "function") showSection("whatsapp");
-      setTimeout(() => {
-        if (typeof window.switchWaTab === "function") window.switchWaTab("compose");
-      }, 100);
+      sessionStorage.setItem("fs_wa_prefill", JSON.stringify({
+        recipient: window._waPrefillRecipient,
+        message: window._waPrefillMessage,
+      }));
+      if (typeof window.navigateToSection === "function") window.navigateToSection("whatsapp");
     };
 
     /** Admin-only guard — throws with status 403 for non-admins. */
@@ -13720,6 +14413,10 @@
           renewalNotificationSent: false,
           renewalNotificationSentAt: null,
           commissionMonthKey: `${approvedAtClient.getFullYear()}-${String(approvedAtClient.getMonth() + 1).padStart(2, "0")}`,
+          advisorCommissionStatus: isDirect ? "n/a" : "pending",
+          managerCommissionStatus: "pending",
+          paymentCreatedAt: serverTimestamp(),
+          paymentPendingNotificationSent: false,
         };
 
         await updateDoc(saleRef, approvalPatch);
@@ -13745,6 +14442,10 @@
           _commissionPersisted: !!(comm.advisorCommission || comm.managerCommission),
           _commissionHydrated: !!(comm.advisorCommission || comm.managerCommission),
           commissionMonthKey: `${approvedAtClient.getFullYear()}-${String(approvedAtClient.getMonth() + 1).padStart(2, "0")}`,
+          advisorCommissionStatus: isDirect ? "n/a" : "pending",
+          managerCommissionStatus: "pending",
+          paymentCreatedAt: approvedAtClient,
+          paymentPendingNotificationSent: false,
         });
 
         if (typeof window.updatePerformanceTiles === "function") {
@@ -14071,6 +14772,16 @@
             window.updatePerformanceTiles();
           }
           await maybeBackfillCommissionsOnce();
+        }
+
+        if (typeof window.renderPaymentStatusPage === "function") {
+          window.renderPaymentStatusPage(allSales);
+        }
+        if (typeof window.renderManagerPaymentSummary === "function") {
+          window.renderManagerPaymentSummary(allSales);
+        }
+        if (typeof window.persistDashboardSessionCache === "function") {
+          window.persistDashboardSessionCache();
         }
     }
 
@@ -14935,8 +15646,8 @@
     };
 
     window.navigateToCommissions = function () {
-      if (typeof window.showSection === "function") {
-        window.showSection("commission-report");
+      if (typeof window.navigateToSection === "function") {
+        window.navigateToSection("commission-report");
       }
     };
 
@@ -14965,26 +15676,32 @@
       }
       let usingFallback = false;
       const onSalesErr = (err) => {
-        console.error("closed_sales listener error:", err);
+        console.error("closed_sales listener error:", err?.code, err?.message || err);
         if (usingFallback) {
-          getDocs(collection(db, "closed_sales")).then(handleClosedSalesSnapshot).catch(() => {});
+          getDocs(collection(db, "closed_sales"))
+            .then(handleClosedSalesSnapshot)
+            .catch((e) => firestoreListenError("closed_sales-fetch", e));
           return;
         }
         usingFallback = true;
         window._closedSalesUnsubscribe = onSnapshot(
           collection(db, "closed_sales"),
-          handleClosedSalesSnapshot,
-          onSalesErr
+          (snap) => {
+            window._markFirestoreConnected?.();
+            handleClosedSalesSnapshot(snap);
+          },
+          (e) => firestoreListenError("closed_sales-fallback", e)
         );
       };
       window._closedSalesUnsubscribe = onSnapshot(
         query(collection(db, "closed_sales"), orderBy("submittedAt", "desc")),
-        handleClosedSalesSnapshot,
+        (snap) => {
+          window._markFirestoreConnected?.();
+          handleClosedSalesSnapshot(snap);
+        },
         onSalesErr
       );
     };
-
-    window.initClosedSalesListener();
 
     // ╔══════════════════════════════════════════════════════════════════════╗
     // ║  COMPANY PROFILE — GET/PUT /api/admin/company-settings              ║
@@ -15658,11 +16375,12 @@
       const examSec = document.getElementById("section-managerexam");
       if (blocked) {
         if (examSec) examSec.style.display = "block";
-        if (typeof window.showSection === "function") {
-          const active = document.getElementById("section-managerexam");
-          if (!active?.classList.contains("active")) {
-            window.showSection("managerexam", { bypassExamGate: true });
-          }
+        const onExamPage = typeof sectionFromPath === "function" && sectionFromPath() === "managerexam";
+        const active = document.getElementById("section-managerexam");
+        if (!onExamPage && typeof window.navigateToSection === "function") {
+          window.navigateToSection("managerexam", { bypassExamGate: true });
+        } else if (!active?.classList.contains("active") && typeof window.initPageSection === "function") {
+          window.initPageSection("managerexam", { bypassExamGate: true, pageInit: true });
         }
       }
     };
@@ -16786,7 +17504,7 @@
 
     window.enterDashboardAfterExamPass = function () {
       if (window.managerExamBlocksAccess()) return;
-      if (typeof window.showSection === "function") window.showSection("dashboard");
+      if (typeof window.navigateToSection === "function") window.navigateToSection("dashboard");
       if (window._pendingManagerAnnouncementShow && typeof window.tryShowPendingManagerAnnouncement === "function") {
         setTimeout(window.tryShowPendingManagerAnnouncement, 200);
       }
@@ -16906,7 +17624,7 @@
     // ╔══════════════════════════════════════════════════════════════════════╗
     // ║  AUTHENTICATION                                                      ║
     // ║  Collections: system_admins/{username}, managers (existing)          ║
-    // ║  Default admin: admin / Admin@123  (seeded on first load)            ║
+    // ║  Admin bootstrap: npm run seed:admin (see .env.example)              ║
     // ╚══════════════════════════════════════════════════════════════════════╝
 
     // ╔══════════════════════════════════════════════════════════════════════╗
@@ -17039,23 +17757,6 @@
       return { ok: true };
     };
 
-    /** Seed a default admin account if none exists */
-    async function seedDefaultAdmin() {
-      const adminRef = doc(db, "system_admins", "admin");
-      const snap = await getDoc(adminRef);
-      if (!snap.exists()) {
-        const hash = await hashPassword("Admin@123");
-        await setDoc(adminRef, {
-          passwordHash: hash,
-          name: "Administrator",
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
-      }
-    }
-    // Fire-and-forget seeding on load
-    seedDefaultAdmin().catch(() => {});
-
     /* ═══════════════════════════════════════════════════════════
        REAL-TIME NOTIFICATION SYSTEM
        Infrastructure: Firestore onSnapshot (replaces Socket.io)
@@ -17183,6 +17884,7 @@
 
     // ── GET: real-time listener for company_settings ──────────────────────
     onSnapshot(COMPANY_DOC, (snap) => {
+      window._markFirestoreConnected?.();
       if (snap.exists()) {
         const data = snap.data();
         applyBranding(data);
@@ -17196,7 +17898,7 @@
           window.populateCardHeaderBannerPreview(data);
         }
       }
-    });
+    }, (err) => firestoreListenError("company_settings", err));
 
     // ── PUT: save company settings ────────────────────────────────────────
     window.saveCompanySettings = async function (e) {
@@ -17266,6 +17968,13 @@
     window.submitAddManager = async function (e) {
       e.preventDefault();
 
+      try {
+        window.assertAdminAccess("Add manager");
+      } catch (err) {
+        window.showToast(err.message, "error");
+        return;
+      }
+
       // Front-end validation (defined in the non-module UI script)
       if (!window.validateManagerForm()) return;
 
@@ -17298,6 +18007,9 @@
           pan:          document.getElementById("mgr-pan").value.trim().toUpperCase(),
           address:      document.getElementById("mgr-address").value.trim(),
           designation:  (document.getElementById("mgr-designation")?.value || "").trim() || "Manager",
+          bankName:     document.getElementById("mgr-bank-name")?.value.trim() || "",
+          bankAccountNumber: document.getElementById("mgr-bank-account")?.value.trim() || "",
+          bankIfsc:     (document.getElementById("mgr-bank-ifsc")?.value.trim() || "").toUpperCase(),
           username:     username,
           hashedPassword: await hashPassword(rawPassword),
           disabled:     false,
@@ -17326,6 +18038,12 @@
     // ── TOGGLE MANAGER ACTIVE / DISABLED STATUS ──────────────────────────
     window.toggleMgrStatus = async function (id, currentlyDisabled) {
       try {
+        window.assertAdminAccess("Update manager status");
+      } catch (err) {
+        window.showToast(err.message, "error");
+        return;
+      }
+      try {
         await updateDoc(doc(db, "managers", id), { disabled: !currentlyDisabled });
         window.showToast(
           currentlyDisabled ? "Manager account enabled." : "Manager account disabled.",
@@ -17340,6 +18058,12 @@
 
     // ── DELETE MANAGER ───────────────────────────────────────────────────
     window.deleteMgr = async function (id, name) {
+      try {
+        window.assertAdminAccess("Delete manager");
+      } catch (err) {
+        window.showToast(err.message, "error");
+        return;
+      }
       if (!confirm(`Permanently delete manager "${name}"?\nThis action cannot be undone.`)) return;
       try {
         await deleteDoc(doc(db, "managers", id));
@@ -17360,6 +18084,12 @@
     //   • updatedAt timestamp is set so audit trails are possible.
     window.submitEditManager = async function (e) {
       e.preventDefault();
+      try {
+        window.assertAdminAccess("Edit manager");
+      } catch (err) {
+        window.showToast(err.message, "error");
+        return;
+      }
       if (!window.validateEditManagerForm()) return;
 
       const btn     = document.getElementById("btn-submit-edit-manager");
@@ -17433,7 +18163,7 @@
       advisors:    "Manage Advisors",
       digitalcard: "Digital Visiting Cards",
       approvals:   "Pending Approvals",
-      performance: "Financial Performance",
+      performance: "Sales Performance",
       company:     "Company Profile",
       closedsales: "Closed Sales",
       commission:  "Commission Settings",
@@ -17447,6 +18177,12 @@
       whatsapp:    "WhatsApp Bulk Messaging",
       systemconfig: "System Configuration",
       appmgmt:     "App Management",
+      paymentstatus: "Payment Status",
+      "advisor-approvals": "Pending Advisor Approvals",
+      "contest-setup": "Contest Management",
+      "contest-progress": "Contest Progress",
+      contest: "Contest",
+      mgrpaymentsummary: "Payment Summary",
     };
 
     const SECTION_ROUTES = {
@@ -17473,6 +18209,12 @@
       exammgmt: "/exammgmt",
       certsettings: "/certsettings",
       managerexam: "/managerexam",
+      paymentstatus: "/payment-status",
+      "advisor-approvals": "/advisor-approvals",
+      "contest-setup": "/contest-setup",
+      "contest-progress": "/contest-progress",
+      contest: "/contest",
+      mgrpaymentsummary: "/payment-summary",
     };
 
     const ROUTE_TO_SECTION = Object.fromEntries(
@@ -17480,39 +18222,132 @@
     );
     ROUTE_TO_SECTION["/reports/commission"] = "commission-report";
     ROUTE_TO_SECTION["/commission-report"] = "commission-report";
+    ROUTE_TO_SECTION["/contest-results"] = "contest-progress";
 
     function normalizeSectionName(name) {
       if (name === "reports-commission" || name === "commissions-report") return "commission-report";
       return name;
     }
 
-    function syncUrlForSection(name, opts) {
-      if (opts?.skipUrlSync) return;
-      const path = SECTION_ROUTES[name];
-      if (!path || !window.history?.pushState) return;
-      const target = path === "/" ? "/" : path;
-      if (window.location.pathname !== target) {
-        history.pushState({ section: name }, "", target);
-      }
-    }
+    const NAV_FOCUS_KEY = "fs_nav_focus";
+    const WA_PREFILL_KEY = "fs_wa_prefill";
+
+    window.SECTION_ROUTES = SECTION_ROUTES;
+    window.ROUTE_TO_SECTION = ROUTE_TO_SECTION;
 
     function sectionFromPath() {
       const p = (window.location.pathname || "/").replace(/\/$/, "") || "/";
-      return ROUTE_TO_SECTION[p] || "dashboard";
+      if (ROUTE_TO_SECTION[p]) return ROUTE_TO_SECTION[p];
+      if (/^\/contest-details\/[^/]+$/.test(p)) return "contest";
+      return "dashboard";
     }
 
-    window.addEventListener("popstate", () => {
-      const name = sectionFromPath();
-      if (typeof showSection === "function") {
-        showSection(name, { skipUrlSync: true });
+    function sectionPath(name, opts) {
+      if (opts?.contestId) {
+        return `/contest-details/${encodeURIComponent(opts.contestId)}`;
       }
-    });
+      return SECTION_ROUTES[name] || "/";
+    }
 
-    // ── SECTION SWITCHER ─────────────────────────────────────────────────
-    // Hides all dash-section divs, shows the requested one,
-    // updates the header title, and highlights the correct nav link.
-    function showSection(name, options) {
+    function resolveSectionAccess(name, opts) {
+      if (!opts?.bypassExamGate && typeof window.canAccessDashboardSection === "function"
+          && !window.canAccessDashboardSection(name)) {
+        return { allowed: false, redirect: "managerexam", bypassExamGate: true };
+      }
+      if (name === "systemconfig" && window._session?.role !== "admin") {
+        return { allowed: false, toast: ["System Configuration is available to administrators only.", "error"] };
+      }
+      if (name === "managers" && window._session?.role !== "admin") {
+        return { allowed: false, toast: ["Managers management is available to administrators only.", "error"], redirect: "dashboard" };
+      }
+      if (name === "commission-report" && window._session?.role !== "admin" && window._session?.role !== "manager") {
+        return { allowed: false, toast: ["Commission report is available to administrators and managers only.", "error"], redirect: "dashboard" };
+      }
+      return { allowed: true };
+    }
+
+    function applyPendingNavFocus(name) {
+      try {
+        const raw = sessionStorage.getItem(NAV_FOCUS_KEY);
+        if (!raw) return;
+        const focus = JSON.parse(raw);
+        if (focus.section !== name) return;
+        sessionStorage.removeItem(NAV_FOCUS_KEY);
+
+        if (focus.cardAdvisor && name === "digitalcard") {
+          if (typeof window.populateCardAdvisorSelect === "function") {
+            window.populateCardAdvisorSelect(focus.cardAdvisor);
+          }
+          if (typeof window.onCardSelectChange === "function") {
+            window.onCardSelectChange(focus.cardAdvisor);
+          }
+        }
+
+        if (focus.tab && name === "approvals" && typeof window.switchApprovalTab === "function") {
+          window.switchApprovalTab(focus.tab);
+        }
+
+        if (focus.recordId) {
+          window._notificationFocusPending = focus;
+          [120, 400, 900].forEach((ms) => {
+            window.setTimeout(() => window.flushNotificationFocus?.(), ms);
+          });
+        }
+      } catch (_) { /* ignore malformed focus payload */ }
+    }
+
+    function applyPendingWhatsAppPrefill() {
+      try {
+        const raw = sessionStorage.getItem(WA_PREFILL_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        sessionStorage.removeItem(WA_PREFILL_KEY);
+        if (data.recipient) window._waPrefillRecipient = data.recipient;
+        if (data.message) window._waPrefillMessage = data.message;
+        if (typeof window.switchWaTab === "function") window.switchWaTab("compose");
+      } catch (_) { /* ignore */ }
+    }
+
+    /** Full-page navigation — assigns browser URL and reloads the SPA shell. */
+    function navigateToSection(name, options) {
       const opts = options || {};
+      name = normalizeSectionName(name);
+      const access = resolveSectionAccess(name, opts);
+      if (!access.allowed) {
+        if (access.toast) window.showToast?.(...access.toast);
+        if (access.redirect) {
+          const redirectOpts = access.bypassExamGate ? { bypassExamGate: true } : {};
+          if (opts.navFocus) redirectOpts.navFocus = opts.navFocus;
+          navigateToSection(access.redirect, redirectOpts);
+        }
+        return;
+      }
+
+      if (opts.navFocus) {
+        sessionStorage.setItem(NAV_FOCUS_KEY, JSON.stringify(opts.navFocus));
+      } else if (opts.recordId || opts.tab || opts.cardAdvisor) {
+        sessionStorage.setItem(NAV_FOCUS_KEY, JSON.stringify({ section: name, ...opts }));
+      }
+
+      window.location.assign(sectionPath(name, opts));
+    }
+    window.navigateToSection = navigateToSection;
+
+    /** Hide route boot loader after target section is mounted. */
+    function dismissRouteBoot() {
+      document.documentElement.classList.remove("route-boot");
+      document.documentElement.classList.add("route-ready");
+      const loader = document.getElementById("page-route-loader");
+      if (loader) loader.setAttribute("aria-busy", "false");
+    }
+    window.dismissRouteBoot = dismissRouteBoot;
+
+    // ── PAGE SECTION INIT ────────────────────────────────────────────────
+    // On full page load: hide all dash-section divs, show the requested one,
+    // update header/nav, and run section-specific data hooks.
+    function initPageSection(name, options) {
+      const opts = options || {};
+      try {
       name = normalizeSectionName(name);
       if (!opts.bypassExamGate && typeof window.canAccessDashboardSection === "function" && !window.canAccessDashboardSection(name)) {
         name = "managerexam";
@@ -17521,14 +18356,28 @@
       // Close any open user menu dropdowns when navigating
       if (typeof window.closeUserMenus === "function") window.closeUserMenus();
 
+      // Close all modal overlays so navigation never leaves a dialog open
+      if (typeof window.closeAllOpenModals === "function") {
+        window.closeAllOpenModals();
+      } else {
+        document.querySelectorAll(".modal-overlay").forEach((el) => el.classList.add("hidden"));
+        document.body.style.overflow = "";
+      }
+
       if (name === "systemconfig" && window._session?.role !== "admin") {
         window.showToast("System Configuration is available to administrators only.", "error");
         return;
       }
 
+      if (name === "managers" && window._session?.role !== "admin") {
+        window.showToast?.("Managers management is available to administrators only.", "error");
+        if (opts.pageInit) window.history.replaceState(null, "", sectionPath("dashboard"));
+        return initPageSection("dashboard", { ...opts, pageInit: true });
+      }
+
       if (name === "commission-report" && window._session?.role !== "admin" && window._session?.role !== "manager") {
         window.showToast?.("Commission report is available to administrators and managers only.", "error");
-        return showSection("dashboard", { ...opts, skipUrlSync: true });
+        return initPageSection("dashboard", { ...opts, pageInit: true });
       }
 
       // If navigating away from API Settings, lock it (security: clear in-memory keys)
@@ -17538,10 +18387,13 @@
       }
 
       // Toggle sections
-      document.querySelectorAll(".dash-section").forEach(el => el.classList.remove("active"));
+      document.querySelectorAll(".dash-section").forEach(el => {
+        el.classList.remove("active");
+      });
       const target = document.getElementById("section-" + name);
       if (target) {
         target.classList.add("active");
+        target.style.display = "block";
         if (name === "managerexam") target.style.display = "block";
       }
 
@@ -17573,27 +18425,7 @@
         window.populateCertificateSettingsForm();
       }
 
-      // When entering Financial Performance, refresh all tiles + charts
-      if (name === "performance" && typeof window.updatePerformanceTiles === "function") {
-        window.updatePerformanceTiles();
-      }
-
-      // When entering Leads, re-render from cache or re-fetch if needed
-      if (name === "leads") {
-        if (typeof window.renderLeadsTablesFromCache === "function") {
-          window.renderLeadsTablesFromCache();
-        }
-        const needsFetch = window._leadsLoadPending || window._leadsLoadError
-          || ((window._leadsCache || []).length === 0 && !window._leadsLastSnapshot);
-        if (needsFetch && typeof window.initLeadsListener === "function") {
-          window.initLeadsListener();
-        }
-        if ((window._leadsCache || []).length === 0 && typeof window.fetchDashboardTileCounts === "function") {
-          window.fetchDashboardTileCounts({ force: false });
-        }
-      }
-
-      // When entering Dashboard, sync summary tiles from caches
+      // When entering Dashboard, sync summary tiles and charts
       if (name === "dashboard") {
         if (typeof window.fetchDashboardTileCounts === "function") {
           window.fetchDashboardTileCounts({ force: false });
@@ -17602,6 +18434,12 @@
           window.refreshCommissionDashboard();
         } else if (typeof window.refreshDashboardSummaryTiles === "function") {
           window.refreshDashboardSummaryTiles();
+        }
+        if (typeof window.updateAdminCharts === "function") {
+          setTimeout(window.updateAdminCharts, 80);
+        }
+        if (typeof window.renderFollowUpWidget === "function") {
+          window.renderFollowUpWidget();
         }
       }
 
@@ -17618,7 +18456,10 @@
       // When entering WhatsApp section, initialise the UI
       if (name === "whatsapp") {
         setTimeout(() => {
-          if (typeof window.switchWaTab === "function") window.switchWaTab("connection");
+          applyPendingWhatsAppPrefill();
+          if (!sessionStorage.getItem(WA_PREFILL_KEY)) {
+            if (typeof window.switchWaTab === "function") window.switchWaTab("connection");
+          }
           if (typeof window.updateWaConfigBanners === "function") window.updateWaConfigBanners();
           if (typeof window.isWaConfigured === "function" && window.isWaConfigured()) {
             if (typeof window.pollWaStatus === "function") window.pollWaStatus();
@@ -17660,17 +18501,54 @@
         }
       }
 
-      // When entering Dashboard, also refresh dashboard charts
-      if (name === "dashboard") {
-        if (typeof window.updateAdminCharts === "function") {
-          setTimeout(window.updateAdminCharts, 80);
+      if (name === "performance") {
+        if (typeof window.updatePerformanceTiles === "function") {
+          window.updatePerformanceTiles();
         }
         if (typeof window.renderSalesForecastWidget === "function") {
           setTimeout(window.renderSalesForecastWidget, 100);
         }
       }
 
-      syncUrlForSection(name, opts);
+      if (name === "leads") {
+        if (typeof window.renderLeadsTablesFromCache === "function") {
+          window.renderLeadsTablesFromCache();
+        }
+        const needsFetch = window._leadsLoadPending || window._leadsLoadError
+          || ((window._leadsCache || []).length === 0 && !window._leadsLastSnapshot);
+        if (needsFetch && typeof window.initLeadsListener === "function") {
+          window.initLeadsListener();
+        }
+        if ((window._leadsCache || []).length === 0 && typeof window.fetchDashboardTileCounts === "function") {
+          window.fetchDashboardTileCounts({ force: false });
+        }
+      }
+
+      if (name === "paymentstatus" && typeof window.renderPaymentStatusPage === "function") {
+        window.renderPaymentStatusPage(window._closedSalesCache || []);
+      }
+      if (name === "advisor-approvals") {
+        if (typeof window.renderPendingAdvisorApprovalsPage === "function") {
+          window.renderPendingAdvisorApprovalsPage();
+        }
+        if (typeof window.bindAdvisorApprovalsPageEvents === "function") {
+          window.bindAdvisorApprovalsPageEvents();
+        }
+      }
+      if (name === "contest-setup" && typeof window.renderContestAdminPanel === "function") {
+        window.renderContestAdminPanel();
+      }
+      if (name === "contest-progress" && typeof window.renderContestProgressPage === "function") {
+        window.renderContestProgressPage();
+      }
+      if (name === "contest" && typeof window.renderContestPage === "function") {
+        window.renderContestPage();
+      }
+      if (name === "mgrpaymentsummary" && typeof window.renderManagerPaymentSummary === "function") {
+        window.renderManagerPaymentSummary(window._closedSalesCache || []);
+      }
+
+      applyPendingNavFocus(name);
 
       // Update header title
       const titleText = PAGE_TITLES[name] || "Dashboard";
@@ -17694,8 +18572,28 @@
         const sidebar = document.getElementById("sidebar");
         if (!sidebar.classList.contains("-translate-x-full")) toggleSidebar();
       }
+      } finally {
+        dismissRouteBoot();
+      }
+    }
+
+    /** Navigate to a section (full page) or init on current load when pageInit is set. */
+    function showSection(name, options) {
+      const opts = options || {};
+      if (opts.pageInit || opts.skipUrlSync) {
+        initPageSection(name, opts);
+      } else {
+        navigateToSection(name, opts);
+      }
     }
     window.showSection = showSection;
+    window.initPageSection = initPageSection;
+
+    /** Close every modal overlay — called on section navigation. */
+    window.closeAllOpenModals = function () {
+      document.querySelectorAll(".modal-overlay").forEach((el) => el.classList.add("hidden"));
+      document.body.style.overflow = "";
+    };
 
     // ╔══════════════════════════════════════════════════════════════════════╗
     // ║  AUTHENTICATION — session management + RBAC UI                      ║
@@ -17719,21 +18617,19 @@
         dismissed = true;
         const splash = document.getElementById("app-init-splash");
         if (!splash) return;
-        // Fade out
-        splash.classList.add("fade-out");
-        setTimeout(() => { splash.style.display = "none"; }, 520);
+        splash.style.display = "none";
       };
     })();
 
-    /**
-     * Safety fallback: if Firestore never responds (e.g. offline, rules block),
-     * dismiss the splash after 4 seconds so the app stays usable.
-     */
-    setTimeout(function () {
-      if (typeof window._dismissInitSplash === "function") {
-        window._dismissInitSplash();
+    try {
+      const cachedBranding = localStorage.getItem("fs_branding_v1");
+      if (cachedBranding) {
+        const data = JSON.parse(cachedBranding);
+        const splashName = document.getElementById("splash-company-name");
+        if (splashName && data.companyName) splashName.textContent = data.companyName;
       }
-    }, 4000);
+    } catch (_) { /* ignore */ }
+    window._dismissInitSplash();
 
     /**
      * Invalidate branding localStorage cache when admin saves new settings.
@@ -17749,6 +18645,10 @@
       const isManager = session?.role === "manager";
       const isAdvisor = session?.role === "advisor";
       const name      = session?.name || (isAdmin ? "Administrator" : isAdvisor ? "Advisor" : "Manager");
+
+      document.documentElement.classList.remove("role-admin", "role-manager", "role-advisor", "show-login");
+      document.documentElement.classList.add("has-session");
+      if (session?.role) document.documentElement.classList.add("role-" + session.role);
 
       // ─ Sidebar footer user info ───────────────────────────────
       const avatar    = document.getElementById("sidebar-avatar");
@@ -17783,10 +18683,11 @@
       const adminOnlyNavIds = [
         "nav-managers", "nav-approvals", "nav-apisettings", "nav-systemconfig",
         "nav-commission", "nav-settings", "nav-company", "nav-announcements", "nav-exammgmt", "nav-certsettings", "nav-appmgmt", "nav-permissions", "nav-profile",
+        "nav-paymentstatus", "nav-advisor-approvals", "nav-contest-setup",
       ];
       const managerNavIds = [
         "nav-dashboard", "nav-leads", "nav-closedsales", "nav-advisors", "nav-followups",
-        "nav-performance", "nav-whatsapp", "nav-digitalcard",
+        "nav-performance", "nav-whatsapp", "nav-digitalcard", "nav-mgrpaymentsummary",
       ];
       if (isAdvisor) {
         managerNavIds.forEach(id => {
@@ -17814,10 +18715,12 @@
       const adminOnlySections = [
         "section-managers", "section-approvals", "section-apisettings", "section-systemconfig",
         "section-commission", "section-settings", "section-company", "section-announcements", "section-exammgmt", "section-certsettings", "section-appmgmt", "section-permissions", "section-profile",
+        "section-paymentstatus", "section-advisor-approvals", "section-contest-setup", "section-contest-progress",
       ];
       const managerSections = [
         "section-dashboard", "section-leads", "section-closedsales", "section-advisors",
         "section-followups", "section-performance", "section-commission-report", "section-whatsapp", "section-digitalcard",
+        "section-mgrpaymentsummary", "section-contest",
       ];
       if (isAdvisor) {
         managerSections.forEach(id => {
@@ -17834,6 +18737,9 @@
           if (el) el.style.display = isAdmin ? "" : "none";
         });
       }
+
+      const addMgrBtn = document.getElementById("btn-add-manager");
+      if (addMgrBtn) addMgrBtn.style.display = isAdmin ? "" : "none";
 
       // Store session globally
       window._session = session;
@@ -17856,7 +18762,10 @@
       const isAdvisor = window._session?.role === "advisor";
 
       const mgrCard = document.getElementById("dash-card-managers");
-      if (mgrCard) mgrCard.classList.toggle("hidden", !isAdmin);
+      if (mgrCard) {
+        mgrCard.classList.toggle("hidden", !isAdmin);
+        mgrCard.style.display = isAdmin ? "" : "none";
+      }
 
       const setSub = (id, text) => {
         const el = document.getElementById(id);
@@ -17872,7 +18781,7 @@
         const revLabel = document.getElementById("dash-revenue-label");
         if (revLabel) revLabel.textContent = "Approved / Reviews";
         const fupSub = document.getElementById("followups-section-subtitle");
-        if (fupSub) fupSub.textContent = "Your team's leads scheduled for follow-up today or overdue";
+        if (fupSub) fupSub.textContent = "Your team's leads scheduled for follow-up today";
       } else if (isAdmin) {
         setSub("dash-advisors-sub", "Live from Firestore");
         setSub("dash-leads-sub", "Live from Firestore");
@@ -17884,29 +18793,14 @@
         const revExtra = document.getElementById("count-approved-reviews");
         if (revExtra) revExtra.classList.add("hidden");
         const fupSub = document.getElementById("followups-section-subtitle");
-        if (fupSub) fupSub.textContent = "All leads scheduled for follow-up today or overdue";
+        if (fupSub) fupSub.textContent = "Leads with follow-ups scheduled for today";
       }
 
       const approvalsCard = document.getElementById("dash-card-approvals");
       if (approvalsCard) {
-        approvalsCard.onclick = isAdmin
-          ? () => { if (typeof showSection === "function") showSection("approvals"); }
-          : () => { if (typeof showSection === "function") showSection("closedsales"); };
+        approvalsCard.href = isAdmin ? "/approvals" : "/closedsales";
+        approvalsCard.onclick = null;
       }
-
-      const sfSec = document.getElementById("sales-forecast-section");
-      if (sfSec) {
-        sfSec.classList.toggle("hidden", isAdvisor || !(isAdmin || isManager));
-        if (!sfSec.classList.contains("hidden") && typeof window.renderSalesForecastWidget === "function") {
-          setTimeout(window.renderSalesForecastWidget, 60);
-        }
-      }
-
-      const sfTeamWrap = document.getElementById("sf-team-wrap");
-      if (sfTeamWrap) sfTeamWrap.classList.toggle("hidden", !isManager);
-
-      const sfFilterWrap = document.getElementById("sf-advisor-filter-wrap");
-      if (sfFilterWrap) sfFilterWrap.classList.toggle("hidden", !isManager);
 
       const commNav = document.getElementById("nav-commission-report");
       const commCard = document.getElementById("dash-card-commission");
@@ -17962,11 +18856,15 @@
         const dcardAllowed = typeof window.canAccessDigitalCards === "function"
           ? window.canAccessDigitalCards() : false;
         document.querySelectorAll(".nav-item[id^='nav-']").forEach(el => {
-          const show = (el.id === "nav-digitalcard" && dcardAllowed) || el.id === "nav-whatsapp";
+          const show =
+            (el.id === "nav-digitalcard" && dcardAllowed) ||
+            el.id === "nav-whatsapp";
           el.style.display = show ? "" : "none";
         });
         document.querySelectorAll(".dash-section[id^='section-']").forEach(el => {
-          const show = (el.id === "section-digitalcard" && dcardAllowed) || el.id === "section-whatsapp";
+          const show =
+            (el.id === "section-digitalcard" && dcardAllowed) ||
+            el.id === "section-whatsapp";
           el.style.display = show ? "" : "none";
         });
         const cssEl = document.getElementById("feature-flags-css");
@@ -18073,8 +18971,8 @@
             },
             {
               key: "performance",
-              label: "Performance Reports",
-              desc: "Access financial performance dashboards, charts, and MTD/YTD metrics.",
+              label: "Sales Performance",
+              desc: "Access the full sales performance page with charts, MTD/YTD metrics, and exports.",
               icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
             },
           ],
@@ -18184,7 +19082,10 @@
 
     /** Navigate to login page (clear dashboard) */
     window.showLoginPage = function () {
-      document.getElementById("login-overlay").style.display = "flex";
+      document.documentElement.classList.remove("has-session", "role-admin", "role-manager", "role-advisor", "route-boot", "route-ready");
+      document.documentElement.classList.add("show-login");
+      document.documentElement.removeAttribute("data-route-section");
+      document.getElementById("login-overlay").style.display = "";
       // Clear form
       const u = document.getElementById("login-username");
       const p = document.getElementById("login-password");
@@ -18201,42 +19102,100 @@
     window.showDashboard = async function (session, options) {
       const opts = options || {};
       window._session = session;
+      document.documentElement.classList.remove("show-login");
+      document.documentElement.classList.add("has-session");
       document.getElementById("login-overlay").style.display = "none";
+
       window.applyRoleBasedUI(session);
 
-      if (typeof window.setDashboardTileLoading === "function") {
-        window.setDashboardTileLoading("count-advisors", true);
-        window.setDashboardTileLoading("count-leads", true);
-      }
-      if (typeof window.setDashboardTilesLoading === "function") {
-        window.setDashboardTilesLoading(true);
-      }
+      const hasSessionCache = typeof window.hydrateDashboardSessionCache === "function"
+        && window.hydrateDashboardSessionCache();
 
-      if (typeof window.initLeadsListener === "function") window.initLeadsListener();
-      if (typeof window.initAdvisorsListener === "function") window.initAdvisorsListener();
-      if (typeof window.initClosedSalesListener === "function") window.initClosedSalesListener();
-
-      try {
-        const countsTask = typeof window.fetchDashboardTileCounts === "function"
-          ? window.fetchDashboardTileCounts({ force: false })
-          : Promise.resolve();
-        const restTask = typeof window.refreshAllDashboardData === "function"
-          ? window.refreshAllDashboardData({ skipTileCounts: true })
-          : Promise.resolve();
-        await Promise.all([countsTask, restTask]);
-      } catch (err) {
-        console.error("[Dashboard] showDashboard data bootstrap failed:", err);
-        if (typeof window.setDashboardTilesLoading === "function") {
-          window.setDashboardTilesLoading(false);
+      const finishNavigation = () => {
+        if (typeof window.syncManagerCountDisplay === "function") window.syncManagerCountDisplay();
+        if (typeof window.applyManagerExamGateUI === "function") {
+          window.applyManagerExamGateUI();
         }
+        if (session?.role === "manager" && typeof window.managerExamBlocksAccess === "function" && window.managerExamBlocksAccess()) {
+          if (typeof sectionFromPath === "function" && sectionFromPath() !== "managerexam") {
+            if (typeof window.navigateToSection === "function") {
+              window.navigateToSection("managerexam", { bypassExamGate: true });
+              return;
+            }
+          }
+          if (typeof showSection === "function") showSection("managerexam", { bypassExamGate: true, pageInit: true });
+        } else if (session?.role === "advisor") {
+          if (typeof sectionFromPath === "function" && sectionFromPath() !== "digitalcard") {
+            if (typeof window.navigateToSection === "function") {
+              window.navigateToSection("digitalcard");
+              return;
+            }
+          }
+          if (typeof showSection === "function") showSection("digitalcard", { pageInit: true });
+          setTimeout(() => {
+            if (typeof window.initDigitalCardSection === "function") window.initDigitalCardSection();
+          }, 150);
+        } else if (typeof showSection === "function") {
+          const initial = typeof sectionFromPath === "function" ? sectionFromPath() : "dashboard";
+          showSection(initial, { pageInit: true });
+        }
+        if (session?.role === "manager" && opts.freshLogin
+            && !(typeof window.managerExamBlocksAccess === "function" && window.managerExamBlocksAccess())) {
+          window._pendingManagerAnnouncementShow = true;
+          setTimeout(() => {
+            if (typeof window.tryShowPendingManagerAnnouncement === "function") {
+              window.tryShowPendingManagerAnnouncement();
+            }
+          }, 200);
+        }
+      };
+
+      // Start Firestore listeners after Firebase is ready (avoids WebChannel race on reload)
+      const startDataListeners = () => {
+        if (typeof window.initLeadsListener === "function") window.initLeadsListener();
+        if (typeof window.initAdvisorsListener === "function") window.initAdvisorsListener();
+        if (typeof window.initClosedSalesListener === "function") window.initClosedSalesListener();
+      };
+      if (window._firebaseAuthReady) {
+        queueMicrotask(startDataListeners);
+      } else if (typeof window.waitForFirebaseReady === "function") {
+        window.waitForFirebaseReady().then(startDataListeners).catch((err) => {
+          console.warn("[Dashboard] Firebase not ready for listeners:", err);
+          startDataListeners();
+        });
+      } else {
+        startDataListeners();
+      }
+
+      // Mount the target section immediately — before async exam checks / tile loading
+      finishNavigation();
+
+      if (!hasSessionCache) {
         if (typeof window.setDashboardTileLoading === "function") {
-          window.setDashboardTileLoading("count-advisors", false);
-          window.setDashboardTileLoading("count-leads", false);
+          window.setDashboardTileLoading("count-advisors", true);
+          window.setDashboardTileLoading("count-leads", true);
+        }
+        if (typeof window.setDashboardTilesLoading === "function") {
+          window.setDashboardTilesLoading(true);
         }
       }
 
       if (typeof window.applyFeatureFlags === "function") window.applyFeatureFlags();
       if (typeof window.applyDigitalCardAccessUI === "function") window.applyDigitalCardAccessUI();
+      if (typeof window.applyDashboardScopeUI === "function") window.applyDashboardScopeUI();
+
+      if (session?.role === "manager") {
+        if (typeof window.initManagerExamListener === "function") window.initManagerExamListener();
+        const examTasks = [];
+        if (typeof window.refreshManagerExamSession === "function") examTasks.push(window.refreshManagerExamSession());
+        if (typeof window.loadExamSettingsFromFirestore === "function") examTasks.push(window.loadExamSettingsFromFirestore());
+        if (examTasks.length) {
+          Promise.all(examTasks).then(() => {
+            if (typeof window.applyManagerExamGateUI === "function") window.applyManagerExamGateUI();
+          }).catch(() => {});
+        }
+      }
+
       if (typeof window.initNotificationsListener === "function") {
         window.initNotificationsListener();
       }
@@ -18250,43 +19209,26 @@
         });
       }
 
-      const finishNavigation = () => {
-        if (typeof window.applyManagerExamGateUI === "function") {
-          window.applyManagerExamGateUI();
+      (async () => {
+        try {
+          const countsTask = typeof window.fetchDashboardTileCounts === "function"
+            ? window.fetchDashboardTileCounts({ force: false })
+            : Promise.resolve();
+          const restTask = typeof window.refreshAllDashboardData === "function"
+            ? window.refreshAllDashboardData({ skipTileCounts: true })
+            : Promise.resolve();
+          await Promise.all([countsTask, restTask]);
+        } catch (err) {
+          console.error("[Dashboard] showDashboard data bootstrap failed:", err);
+          if (typeof window.setDashboardTilesLoading === "function") {
+            window.setDashboardTilesLoading(false);
+          }
+          if (typeof window.setDashboardTileLoading === "function") {
+            window.setDashboardTileLoading("count-advisors", false);
+            window.setDashboardTileLoading("count-leads", false);
+          }
         }
-        if (session?.role === "manager" && typeof window.managerExamBlocksAccess === "function" && window.managerExamBlocksAccess()) {
-          if (typeof showSection === "function") showSection("managerexam", { bypassExamGate: true });
-        } else if (session?.role === "advisor") {
-          if (typeof showSection === "function") showSection("digitalcard");
-          setTimeout(() => {
-            if (typeof window.initDigitalCardSection === "function") window.initDigitalCardSection();
-          }, 150);
-        } else if (typeof showSection === "function") {
-          const initial = typeof sectionFromPath === "function" ? sectionFromPath() : "dashboard";
-          showSection(initial, { skipUrlSync: initial === "dashboard" && (location.pathname === "/" || location.pathname === "") });
-        }
-        if (session?.role === "manager" && opts.freshLogin
-            && !(typeof window.managerExamBlocksAccess === "function" && window.managerExamBlocksAccess())) {
-          window._pendingManagerAnnouncementShow = true;
-          setTimeout(() => {
-            if (typeof window.tryShowPendingManagerAnnouncement === "function") {
-              window.tryShowPendingManagerAnnouncement();
-            }
-          }, 200);
-        }
-      };
-
-      if (session?.role === "manager") {
-        if (typeof window.initManagerExamListener === "function") window.initManagerExamListener();
-        const tasks = [];
-        if (typeof window.refreshManagerExamSession === "function") tasks.push(window.refreshManagerExamSession());
-        if (typeof window.loadExamSettingsFromFirestore === "function") tasks.push(window.loadExamSettingsFromFirestore());
-        if (tasks.length) {
-          Promise.all(tasks).finally(finishNavigation);
-          return;
-        }
-      }
-      finishNavigation();
+      })();
     };
 
     /** Handle login form submit */
@@ -18497,6 +19439,24 @@
 
     /** Initialise auth on page load — restore from sessionStorage or show login */
     (async function initAuth() {
+      const stored = sessionStorage.getItem(SESSION_KEY);
+      if (stored) {
+        try {
+          const session = JSON.parse(stored);
+          if (session?.role) {
+            window._session = session;
+            if (typeof window.waitForFirebaseReady === "function") {
+              try {
+                await window.waitForFirebaseReady();
+              } catch (err) {
+                console.warn("[Auth] Firebase init delayed:", err);
+              }
+            }
+            window.showDashboard(session);
+            return;
+          }
+        } catch (_) { /* fall through to login */ }
+      }
       if (typeof window.waitForFirebaseReady === "function") {
         try {
           await window.waitForFirebaseReady();
@@ -18504,18 +19464,6 @@
           console.warn("[Auth] Firebase init delayed:", err);
         }
       }
-      const stored = sessionStorage.getItem(SESSION_KEY);
-      if (stored) {
-        try {
-          const session = JSON.parse(stored);
-          if (session?.role) {
-            window._session = session;          // restore in-memory session
-            window.showDashboard(session);
-            return;
-          }
-        } catch (_) { /* fall through to login */ }
-      }
-      // No valid session → show login
       window.showLoginPage();
     })();
 
@@ -18861,74 +19809,62 @@
     window.renderFollowUpWidget = function () {
       const esc = window._esc || (s => String(s ?? ""));
       const { todayLeads, overdueLeads, allLeads } = getFollowUpLeads();
-      const today = todayStr();
 
       // Sidebar badge = today + overdue
       const urgentCount = todayLeads.length + overdueLeads.length;
       window.updateFollowUpBadge(urgentCount);
 
-      // Dashboard widget counter chip
+      // Dashboard chip — today only
       const chip = document.getElementById("followup-widget-count");
       if (chip) {
-        if (urgentCount > 0) {
-          chip.textContent = `${urgentCount} due`;
+        if (todayLeads.length > 0) {
+          chip.textContent = `${todayLeads.length} today`;
           chip.classList.remove("hidden");
         } else {
           chip.classList.add("hidden");
         }
       }
 
-      // Full-section count tiles
       const setCount = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
       setCount("fup-count-today",   todayLeads.length);
       setCount("fup-count-overdue", overdueLeads.length);
       setCount("fup-count-all",     allLeads.length);
 
-      // ── Widget list ─────────────────────────────────────
       const empty = document.getElementById("followup-widget-empty");
-      const list  = document.getElementById("followup-widget-list");
-      if (!list) return;
+      const tbody = document.getElementById("dash-followups-table-body");
+      if (!tbody) return;
 
-      const displayed = [...overdueLeads, ...todayLeads].slice(0, 8);
-
-      if (displayed.length === 0) {
-        list.innerHTML = "";
+      if (todayLeads.length === 0) {
+        tbody.innerHTML = "";
         if (empty) empty.classList.remove("hidden");
         return;
       }
       if (empty) empty.classList.add("hidden");
 
-      list.innerHTML = displayed.map(l => {
-        const dateStr = tsToDateStr(l.follow_up_date) || "";
-        const isOverdue = dateStr < today;
-        const dotCls = isOverdue ? "followup-dot-overdue" : "followup-dot-today";
-        const dateLabel = isOverdue
-          ? `<span class="text-[10px] text-red-500 font-semibold">Overdue · ${fmtDateStr(dateStr)}</span>`
-          : `<span class="text-[10px] text-amber-600 font-semibold">Today · ${fmtDateStr(dateStr)}</span>`;
-        return `
-          <div class="followup-item">
-            <span class="followup-dot ${dotCls}"></span>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-gray-800 truncate">${esc(l.name)}</p>
-              <p class="text-xs text-gray-400 truncate">${esc(l.productCategory || "—")} · ${esc(l.assignedTo || "—")}</p>
-              ${dateLabel}
-            </div>
+      tbody.innerHTML = todayLeads.map(l => {
+        const statusDisp = `<span class="px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+          ${(l.status || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+        </span>`;
+        return `<tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+          <td class="px-6 py-4 font-medium text-gray-800">
+            ${esc(l.name)}
+            ${l.follow_up_notes ? `<p class="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">${esc(l.follow_up_notes)}</p>` : ""}
+          </td>
+          <td class="px-6 py-4 text-gray-500 text-xs">${esc(l.phone || "—")}</td>
+          <td class="px-6 py-4"><span class="px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">${esc(l.productCategory || "—")}</span></td>
+          <td class="px-6 py-4">${statusDisp}</td>
+          <td class="px-6 py-4 text-gray-500 text-sm">${esc(l.assignedTo || "Unassigned")}</td>
+          <td class="px-6 py-4">
             <button onclick="window.openFollowUpModal('${esc(l.id)}','${esc(l.name)}')"
-              class="flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700
-                     text-white transition-colors">
+              class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700
+                     text-white transition-colors whitespace-nowrap">
               Update
             </button>
-          </div>`;
-      }).join("") +
-      (urgentCount > 8 ? `<div class="text-center py-2.5 border-t border-amber-100">
-        <button onclick="showSection('followups')" class="text-xs font-medium text-indigo-600 hover:underline">
-          View all ${urgentCount} follow-ups →
-        </button></div>` : "");
+          </td>
+        </tr>`;
+      }).join("");
 
-      // Also refresh the full table if visible
       window.renderFollowUpsTable();
-
-      // Notification badge update (show toast on new same-day follow-ups)
     };
 
     /** Render the full follow-ups table inside section-followups */
@@ -19691,14 +20627,15 @@
         };
         return `
           <div class="notif-item ${n.isRead ? "" : "unread"}"
-            onclick="window.markNotificationRead('${esc(n.id)}'); this.classList.remove('unread');">
+            data-notif-id="${esc(n.id)}"
+            onclick="window.handleNotificationClick('${esc(n.id)}')">
             <div class="notif-icon ${meta.cls}">${meta.svg}</div>
             <div class="flex-1 min-w-0">
               <p class="text-xs font-semibold text-gray-800 truncate">${esc(n.title)}</p>
               <p class="text-xs text-gray-500 mt-0.5 leading-relaxed">${esc(n.message)}</p>
               <p class="text-[10px] text-gray-400 mt-1">${timeAgo(n.createdAt)}</p>
             </div>
-            ${!n.isRead ? `<span class="w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0 mt-1"></span>` : ""}
+            ${!n.isRead ? `<span class="notif-unread-dot w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0 mt-1"></span>` : ""}
           </div>`;
       }).join("");
     };
@@ -19795,6 +20732,10 @@
 
     // ── OPEN ADD MANAGER MODAL ───────────────────────────────────────────
     function openAddManagerModal() {
+      if (window._session?.role !== "admin") {
+        window.showToast?.("Only administrators can add managers.", "error");
+        return;
+      }
       document.getElementById("add-manager-form").reset();
       clearAllFieldErrors();
 
@@ -19805,6 +20746,10 @@
       document.getElementById("pwd-bar-fill").style.cssText = "width:0%; background:";
       document.getElementById("pwd-strength-text").textContent = "";
       document.getElementById("pwd-strength-text").style.color = "";
+
+      if (typeof window.populateManagerBankDropdown === "function") {
+        window.populateManagerBankDropdown();
+      }
 
       document.getElementById("modal-add-manager").classList.remove("hidden");
       document.body.style.overflow = "hidden"; // lock background scroll
@@ -19926,6 +20871,10 @@
       } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(pwd)) {
         window.showFieldError("mgr-password", "Password must include at least one uppercase letter, one lowercase letter, and one digit.");
         ok = false;
+      }
+
+      if (typeof window.validateManagerBankFields === "function") {
+        if (!window.validateManagerBankFields()) ok = false;
       }
 
       return ok;
@@ -20055,7 +21004,11 @@
         renderManagerDropdown(activeManagers);
       }
 
-      ["adv-name", "adv-mobile", "adv-manager"].forEach(id => clearFieldError(id));
+      ["adv-name", "adv-mobile", "adv-manager", "adv-bank-name", "adv-bank-account", "adv-bank-ifsc"].forEach(id => clearFieldError(id));
+
+      if (typeof window.populateAdvisorBankDropdown === "function") {
+        window.populateAdvisorBankDropdown();
+      }
 
       document.getElementById("modal-add-advisor").classList.remove("hidden");
       document.body.style.overflow = "hidden";
@@ -20238,9 +21191,13 @@
           window.showFieldError("adv-manager", "Please select a manager from the dropdown.");
           ok = false;
         }
-      } else if (session.role === "manager" && !session.managerId) {
+      } else       if (session.role === "manager" && !session.managerId) {
         window.showToast("Manager session invalid. Please sign in again.", "error");
         ok = false;
+      }
+
+      if (typeof window.validateAdvisorBankFields === "function") {
+        if (!window.validateAdvisorBankFields()) ok = false;
       }
 
       return ok;
@@ -20408,6 +21365,10 @@
     // Pre-fills all editable fields from the managers cache.
     // Called from both the Detail modal's Edit button and directly.
     window.openEditManagerModal = function (id) {
+      if (window._session?.role !== "admin") {
+        window.showToast?.("Only administrators can edit managers.", "error");
+        return;
+      }
       // If called from the Detail modal Edit button, use the stored current ID
       const docId = id || window._currentDetailMgrId;
       if (!docId) return;

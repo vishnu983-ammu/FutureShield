@@ -1,0 +1,318 @@
+      <!-- ═══════════════════════════════════════════════
+           SECTION: PAYMENT STATUS (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-paymentstatus" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Payment Status</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Approve or reject commission payouts for closed sales. Transaction ID required for approval.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-teal-500 animate-pulse flex-shrink-0"></span>
+            <span class="text-xs font-semibold text-teal-700">
+              <span id="payment-status-pending-count">0</span> pending
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pending Payouts</p>
+            <p id="payment-status-pending-total" class="text-xl font-bold text-teal-600 mt-0.5">₹ 0</p>
+            <p class="text-xs text-gray-400">Total commission awaiting payment</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-teal-50 border-b border-teal-100">
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Customer</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Product</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Premium</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Advisor</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Adv. Comm.</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider">Manager</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Mgr. Comm.</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Advisor Payment</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Manager Payment</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold text-teal-700 uppercase tracking-wider whitespace-nowrap">Approved On</th>
+                </tr>
+              </thead>
+              <tbody id="payment-status-table-body">
+                <tr><td colspan="10" class="text-center py-14 text-gray-400 text-sm">No pending commission payments — all caught up!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: PENDING ADVISOR APPROVALS (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-advisor-approvals" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Pending Advisor Approvals</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Review manager-submitted advisor onboarding requests. Approve to activate or reject with remarks.
+            </p>
+          </div>
+        </div>
+
+        <div id="advisor-approvals-root">
+          <div class="text-center py-16 text-gray-400 text-sm">
+            <p class="font-medium text-gray-500">No pending advisor requests</p>
+            <p class="text-xs text-gray-400 mt-1">Manager-submitted advisors awaiting your review will appear here.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: CONTEST MANAGEMENT (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-contest-setup" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Contest Management</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Create and configure sales contests. Enable a contest to show it to managers.
+            </p>
+          </div>
+          <button type="button" id="btn-add-contest" onclick="window.addNewContest()"
+            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white
+                   bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add New Contest
+          </button>
+        </div>
+
+        <div id="contest-admin-list" class="mb-8">
+          <p class="text-sm text-gray-400 py-4">No contests yet. Click <strong>Add New Contest</strong> to create one.</p>
+        </div>
+
+        <div id="contest-editor-empty" class="bg-white rounded-2xl border border-dashed border-gray-200 px-6 py-12 text-center">
+          <p class="text-sm text-gray-500 font-medium">Select a contest from the list or create a new one to edit.</p>
+          <p class="text-xs text-gray-400 mt-1">Contest details, targets, and images are configured here.</p>
+        </div>
+
+        <div id="contest-editor-panel" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+          <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-base font-semibold text-gray-800">Edit Contest</h3>
+              <p id="contest-editor-status" class="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-0.5">Disabled — hidden from managers</p>
+            </div>
+            <label class="contest-toggle inline-flex items-center gap-2" title="Enable or disable this contest">
+              <span class="text-xs font-medium text-gray-500">Active</span>
+              <input type="checkbox" id="contest-editor-active-toggle"
+                onchange="window.handleContestActiveToggle(event)" />
+              <span class="contest-toggle-slider" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <div class="px-6 py-5 space-y-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="sm:col-span-2">
+                <label for="contest-title" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Contest Title</label>
+                <input type="text" id="contest-title" class="form-field" placeholder="e.g. Q2 Sales Sprint" />
+              </div>
+              <div class="sm:col-span-2">
+                <label for="contest-description" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                <textarea id="contest-description" rows="3" class="form-field resize-none"
+                  placeholder="Contest rules, prizes, and motivation…"></textarea>
+              </div>
+              <div>
+                <label for="contest-advisor-target" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Advisor Target</label>
+                <input type="number" id="contest-advisor-target" class="form-field" min="1" step="1" placeholder="e.g. 10" />
+              </div>
+              <div>
+                <label for="contest-manager-target" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Manager Target</label>
+                <input type="number" id="contest-manager-target" class="form-field" min="1" step="1" placeholder="e.g. 50" />
+              </div>
+              <div>
+                <label for="contest-start-date" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Date</label>
+                <input type="date" id="contest-start-date" class="form-field" />
+              </div>
+              <div>
+                <label for="contest-end-date" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">End Date</label>
+                <input type="date" id="contest-end-date" class="form-field" />
+              </div>
+            </div>
+
+            <div>
+              <p class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Success Criteria</p>
+              <div class="flex flex-wrap gap-4">
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input type="radio" name="contest-criteria" value="sales_count" class="text-indigo-600" checked />
+                  Sales Count
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input type="radio" name="contest-criteria" value="sales_amount" class="text-indigo-600" />
+                  Sales Amount (Premium)
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <p class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Contest Image</p>
+              <div class="flex flex-wrap items-start gap-4">
+                <div class="relative w-32 h-32 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+                  <img id="contest-image-preview" src="" alt="Contest preview" class="hidden w-full h-full object-cover" />
+                  <span id="contest-image-placeholder" class="text-xs text-gray-400 text-center px-2">No image</span>
+                </div>
+                <div class="flex flex-col gap-2">
+                  <input type="file" id="contest-image-input" accept="image/*" class="text-sm text-gray-600"
+                    onchange="window.handleContestImageSelect(event)" />
+                  <button type="button" id="contest-image-clear" class="hidden text-xs text-red-600 hover:text-red-700 font-medium"
+                    onclick="window.clearContestImageDraft()">Remove image</button>
+                  <p id="err-contest-image" class="text-xs text-red-500 hidden"></p>
+                  <p class="text-xs text-gray-400">Max 900 KB · JPG or PNG recommended</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <button type="button" id="btn-save-contest" onclick="window.saveContestSettings()"
+              class="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
+                     bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm disabled:opacity-60">
+              <svg id="contest-save-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Save Contest
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: CONTEST PROGRESS (Admin)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-contest-progress" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Contest Progress</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Live leaderboard and team progress across active contests.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="contest-progress-manager-filter" class="text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Manager</label>
+            <select id="contest-progress-manager-filter" class="form-field min-w-[180px]"
+              onchange="window.onContestProgressManagerFilterChange(event)">
+              <option value="">All Managers</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="contest-progress-root">
+          <div class="text-center py-16 text-gray-400 text-sm">Loading contest progress…</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: CONTEST (Manager)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-contest" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Sales Contest</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Track your team's progress toward contest targets.
+            </p>
+          </div>
+        </div>
+
+        <div id="contest-manager-root">
+          <div class="text-center py-16 text-gray-400 text-sm">No active contest at the moment.</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           SECTION: PAYMENT SUMMARY (Manager)
+      ═══════════════════════════════════════════════ -->
+      <div id="section-mgrpaymentsummary" class="dash-section">
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-800">Payment Summary</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Commission payment status for your team. Send reminders to admin for pending payouts.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+            <span class="text-xs font-semibold text-amber-700">
+              <span id="mgr-payment-page-pending-count">0</span> pending for your team
+            </span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 mb-4">
+          <button id="mgr-payment-tab-pending" type="button" class="subtab-btn active"
+            onclick="window.switchManagerPaymentTab('pending')">
+            Pending
+            <span id="mgr-payment-pending-count" class="ml-1 text-xs opacity-80">(0)</span>
+          </button>
+          <button id="mgr-payment-tab-success" type="button" class="subtab-btn"
+            onclick="window.switchManagerPaymentTab('success')">
+            Processed
+            <span id="mgr-payment-success-count" class="ml-1 text-xs opacity-80">(0)</span>
+          </button>
+        </div>
+
+        <div id="mgr-payment-pending-panel">
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="bg-amber-50 border-b border-amber-100">
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Customer</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Payee</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Role</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider whitespace-nowrap">Commission</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider whitespace-nowrap">Days Pending</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider whitespace-nowrap">Premium</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-amber-700 uppercase tracking-wider">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="mgr-payment-pending-body">
+                  <tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm">No pending commission payments for your team</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="mgr-payment-success-panel" class="hidden">
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="bg-emerald-50 border-b border-emerald-100">
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider">Customer</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider">Payee</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider">Role</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider whitespace-nowrap">Commission</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider whitespace-nowrap">Transaction ID</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-emerald-700 uppercase tracking-wider whitespace-nowrap">Processed On</th>
+                  </tr>
+                </thead>
+                <tbody id="mgr-payment-success-body">
+                  <tr><td colspan="6" class="text-center py-10 text-gray-400 text-sm">No processed payments yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
