@@ -864,6 +864,13 @@
       background: rgba(99,102,241,0.1);
     }
     .login-field.error { border-color: #f87171; }
+    /* Login inputs with left icons — override .login-field shorthand padding */
+    #login-username.login-field {
+      padding: 0.75rem 1rem 0.75rem 2.75rem;
+    }
+    #login-password.login-field {
+      padding: 0.75rem 2.75rem 0.75rem 2.75rem;
+    }
     .login-btn {
       width: 100%;
       background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
@@ -1749,12 +1756,6 @@
         </button>
 
       </form>
-
-      <!-- Footer hint -->
-      <p class="text-xs text-slate-600 text-center">
-        First-time setup: run <code class="text-slate-400">npm run seed:admin</code> with
-        <code class="text-slate-400">ADMIN_SEED_PASSWORD</code> in your <code class="text-slate-400">.env</code>.
-      </p>
 
     </div>
   </div>

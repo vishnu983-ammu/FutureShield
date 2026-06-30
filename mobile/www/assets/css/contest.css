@@ -1,0 +1,80 @@
+/* Contest Management — cylinder charts & admin UI */
+.contest-cylinder {
+  position: relative;
+  width: 3.5rem;
+  height: 5.5rem;
+  border-radius: 1.75rem 1.75rem 0.75rem 0.75rem;
+  background: var(--contest-light, #eef2ff);
+  border: 2px solid var(--contest-border, #c7d2fe);
+  overflow: hidden;
+}
+.contest-cylinder-lg { width: 4.5rem; height: 7rem; }
+.contest-cylinder-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--contest-fill, linear-gradient(180deg, #818cf8, #6366f1));
+  transition: height 0.4s ease;
+}
+.contest-cylinder-fill.achieved { filter: saturate(1.2); }
+.contest-cylinder-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+  pointer-events: none;
+}
+.contest-bar-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.contest-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #818cf8, #6366f1);
+  transition: width 0.4s ease;
+}
+.contest-bar-fill.achieved { background: linear-gradient(90deg, #34d399, #059669); }
+.contest-chart-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: 1rem;
+  text-align: center;
+}
+.contest-chart-card-lg { padding: 1.25rem; }
+.contest-chart-role { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: #6b7280; }
+.contest-chart-name { font-size: 0.95rem; font-weight: 600; color: #111827; margin: 0.25rem 0; }
+.contest-chart-cylinder-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; margin: 0.75rem 0; }
+.contest-chart-pct { font-size: 0.75rem; font-weight: 700; color: var(--contest-main, #6366f1); }
+.contest-chart-metric { font-size: 0.75rem; color: #6b7280; }
+.contest-badge { font-size: 0.65rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 9999px; }
+.contest-badge.achieved { background: #d1fae5; color: #047857; }
+.contest-badge.gap { background: #fef3c7; color: #b45309; }
+.contest-toggle { position: relative; display: inline-flex; cursor: pointer; }
+.contest-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.contest-toggle-slider {
+  width: 2.75rem; height: 1.5rem; background: #d1d5db; border-radius: 9999px;
+  transition: background 0.2s; position: relative;
+}
+.contest-toggle-slider::before {
+  content: ""; position: absolute; width: 1.125rem; height: 1.125rem; left: 3px; bottom: 3px;
+  background: #fff; border-radius: 50%; transition: transform 0.2s;
+}
+.contest-toggle input:checked + .contest-toggle-slider { background: #6366f1; }
+.contest-toggle input:checked + .contest-toggle-slider::before { transform: translateX(1.25rem); }
+.contest-toggle input:disabled + .contest-toggle-slider { opacity: 0.5; cursor: not-allowed; }
+.contest-prize-img { max-height: 8rem; border-radius: 0.75rem; object-fit: cover; }
+.contest-prize-placeholder {
+  width: 6rem; height: 6rem; border-radius: 0.75rem; background: #fffbeb;
+  display: flex; align-items: center; justify-content: center; border: 1px dashed #fcd34d;
+}
+.contest-admin-table .contest-table-row.selected { background: #fafaff; }
+.contest-table-edit-btn {
+  font-size: 0.75rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 0.5rem;
+  border: 1px solid #e5e7eb; background: #fff; color: #374151; cursor: pointer;
+}
+.contest-table-edit-btn:hover { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; }
+.mgr-payment-tab.active { background: #6366f1; color: #fff; }
