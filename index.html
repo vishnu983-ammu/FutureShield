@@ -66,14 +66,65 @@
             var crit = document.createElement("style");
             crit.id = "route-boot-critical";
             crit.textContent =
+              "html.route-boot #app-boot-screen{display:flex!important}" +
+              "html.route-boot #sidebar,html.route-boot #main-content,html.route-boot #login-overlay{visibility:hidden!important;pointer-events:none!important}" +
               "html.route-boot .dash-section,html.route-boot .dash-section.active{display:none!important}" +
               "html.route-boot #page-route-loader{display:flex!important}";
             document.head.appendChild(crit);
-            return;
           }
         }
       } catch (_) { /* fall through */ }
-      document.documentElement.classList.add("show-login");
+      if (!document.documentElement.classList.contains("has-session")) {
+        document.documentElement.classList.add("show-login");
+      }
+      window.__fsBrandingCache = null;
+      try {
+        var brandRaw = localStorage.getItem("fs_branding_v1");
+        if (brandRaw) {
+          var brand = JSON.parse(brandRaw);
+          if (brand && brand.companyName) {
+            window.__fsBrandingCache = brand;
+            document.title = brand.companyName + " \u2013 Admin Dashboard";
+          }
+        }
+      } catch (_) { /* ignore */ }
+      window.__fsApplyBrandSlot = function (slot) {
+        var d = window.__fsBrandingCache;
+        if (!d) return;
+        var name = d.companyName || "";
+        var logo = d.logoBase64 || "";
+        var tag = d.tagline || "";
+        function setName(id) {
+          var el = document.getElementById(id);
+          if (el && name) {
+            el.textContent = name;
+            el.classList.remove("brand-skeleton");
+          }
+        }
+        function setLogo(imgId, iconId) {
+          var img = document.getElementById(imgId);
+          var icon = document.getElementById(iconId);
+          if (!img || !icon) return;
+          if (logo) {
+            img.src = logo;
+            img.classList.remove("hidden");
+            icon.classList.add("hidden");
+          }
+        }
+        if (slot === "sidebar" || slot === "all") {
+          setName("sidebar-company-name");
+          setLogo("sidebar-logo-img", "sidebar-logo-icon");
+        }
+        if (slot === "login" || slot === "all") {
+          setName("login-company-name");
+          var tagEl = document.getElementById("login-company-tagline");
+          if (tagEl) tagEl.textContent = tag || "Secure Admin Portal";
+          setLogo("login-logo-img", "login-logo-icon");
+        }
+        if (slot === "header" || slot === "all") {
+          setLogo("header-logo-img", "header-logo-icon");
+        }
+      };
     })();
   </script>
 
@@ -112,7 +163,59 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <style>
-    body { font-family: 'Inter', sans-serif; background: #f9fafb; }
+    body { font-family: 'Inter', sans-serif; background: #f3f4f6; }
+    html, body { min-height: 100%; }
+
+    /* Full-screen boot veil — covers ghost text/logo before JS hydrates branding */
+    #app-boot-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      background: #f3f4f6;
+      align-items: center;
+      justify-content: center;
+    }
+    html.route-boot #app-boot-screen { display: flex; }
+    html.route-ready #app-boot-screen { display: none !important; }
+
+    /* Fixed logo slots — prevent layout shift when image loads */
+    #sidebar-logo-wrap,
+    #header-logo-wrap {
+      width: 2rem;
+      height: 2rem;
+      min-width: 2rem;
+      min-height: 2rem;
+      flex-shrink: 0;
+      contain: layout style;
+    }
+    #header-logo-wrap { width: 1.75rem; height: 1.75rem; min-width: 1.75rem; min-height: 1.75rem; }
+    .login-logo-ring,
+    #login-logo-wrap {
+      width: 5rem;
+      height: 5rem;
+      min-width: 5rem;
+      min-height: 5rem;
+      flex-shrink: 0;
+      contain: layout style;
+    }
+    #sidebar-company-name,
+    #login-company-name {
+      min-height: 1.5rem;
+      min-width: 6rem;
+    }
+    #sidebar-company-name:empty,
+    #login-company-name:empty {
+      background: linear-gradient(90deg, rgba(148,163,184,0.15) 25%, rgba(148,163,184,0.28) 50%, rgba(148,163,184,0.15) 75%);
+      background-size: 200% 100%;
+      animation: brandShimmer 1.4s infinite linear;
+      border-radius: 4px;
+      color: transparent;
+    }
+    html.show-login #login-company-name:empty {
+      background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0.06) 75%);
+      background-size: 400px 100%;
+    }
 
     /* Custom scrollbar for sidebar */
     ::-webkit-scrollbar       { width: 6px; }
@@ -230,7 +333,7 @@
       align-items: center;
       justify-content: center;
       gap: 0.75rem;
-      background: #f9fafb;
+      background: #f3f4f6;
       transition: opacity 0.2s ease;
     }
     html.route-boot #page-route-loader { display: flex !important; }
@@ -930,7 +1033,7 @@
       display: inline-flex; align-items: center; gap: 4px;
       font-size: 0.7rem; font-weight: 600; padding: 3px 8px;
       border-radius: 6px; cursor: pointer; border: 1.5px solid #d1d5db;
-      background: #f9fafb; color: #6b7280; transition: all 0.12s;
+      background: #f3f4f6; color: #6b7280; transition: all 0.12s;
     }
     .btn-schedule-followup:hover { background: #eff6ff; border-color: #6366f1; color: #6366f1; }
     /* Sidebar follow-up badge */
@@ -1524,6 +1627,11 @@
 
 <body class="bg-gray-100 text-gray-800 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden">
 
+  <!-- Full-screen boot screen (session reload) — hidden after route init -->
+  <div id="app-boot-screen" aria-hidden="true" aria-busy="true">
+    <div class="page-route-spinner" role="status" aria-label="Loading"></div>
+  </div>
+
   <!-- Main app wrapper -->
   <div id="app-root" style="display:contents;">
 
@@ -1552,11 +1660,12 @@
         </div>
         <div>
           <h1 id="login-company-name"
-            class="text-2xl font-bold text-white tracking-tight">AdminPanel</h1>
+            class="text-2xl font-bold text-white tracking-tight"></h1>
           <p id="login-company-tagline"
             class="text-sm text-slate-400 mt-0.5">Secure Admin Portal</p>
         </div>
       </div>
+      <script>window.__fsApplyBrandSlot && window.__fsApplyBrandSlot("login");</script>
 
       <!-- Divider -->
       <div class="w-full h-px bg-white/10"></div>
@@ -1689,9 +1798,8 @@
       <!-- ③ Company name — hidden in mini mode -->
       <span id="sidebar-company-name"
         class="sidebar-brand-text nav-label text-base font-semibold tracking-wide
-               flex-1 truncate text-white">
-        AdminPanel
-      </span>
+               flex-1 truncate text-white"></span>
+      <script>window.__fsApplyBrandSlot && window.__fsApplyBrandSlot("sidebar");</script>
 
       <!-- Mobile close button -->
       <button type="button" onclick="toggleSidebar()" aria-label="Close menu"
@@ -2153,6 +2261,7 @@
         </div>
         <h1 id="page-title" class="text-xl font-semibold text-gray-800 truncate">Dashboard Overview</h1>
       </div>
+      <script>window.__fsApplyBrandSlot && window.__fsApplyBrandSlot("header");</script>
 
       <!-- Mobile page title -->
       <h1 id="page-title-mobile" class="md:hidden flex-1 min-w-0 text-base sm:text-lg font-semibold text-gray-800 truncate text-center sm:text-left">Dashboard Overview</h1>
@@ -5037,7 +5146,7 @@
               </div>
 
               <div class="text-center">
-                <p id="co-name-preview" class="text-lg font-bold text-gray-800">AdminPanel</p>
+                <p id="co-name-preview" class="text-lg font-bold text-gray-800"></p>
                 <p class="text-xs text-gray-400 mt-0.5">Company display name</p>
               </div>
 
@@ -5075,7 +5184,7 @@
                   placeholder="e.g. FutureShield Insurance Ltd."
                   oninput="
                     clearFieldError('co-name');
-                    document.getElementById('co-name-preview').textContent = this.value || 'AdminPanel';
+                    document.getElementById('co-name-preview').textContent = this.value || '';
                   "/>
                 <p id="err-co-name" class="text-xs text-red-500 mt-1 hidden"></p>
               </div>
@@ -5151,7 +5260,7 @@
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <p id="co-strip-name" class="text-white font-semibold text-sm truncate">AdminPanel</p>
+            <p id="co-strip-name" class="text-white font-semibold text-sm truncate"></p>
             <p id="co-strip-tagline" class="text-slate-400 text-xs truncate"></p>
           </div>
           <span class="text-xs text-slate-500 italic flex-shrink-0">Sidebar preview</span>
@@ -9135,58 +9244,27 @@
       if (!raw) return;
       var d = JSON.parse(raw);
       if (!d || !d.companyName) return;
-      // Reject stale entries older than MAX_AGE
       if (d.cachedAt && (Date.now() - d.cachedAt) > MAX_AGE) {
         localStorage.removeItem(CACHE_KEY);
         return;
       }
 
-      var name   = d.companyName;
-      var logo   = d.logoBase64 || "";
-      var tag    = d.tagline    || "";
+      window.__fsBrandingCache = d;
+      window._companyName = d.companyName;
+      document.title = d.companyName + " \u2013 Admin Dashboard";
 
-      // ── Apply company name to all text nodes ──────────────
-      var nameIds = [
-        "sidebar-company-name",
-        "login-company-name",
-        "splash-company-name",
-      ];
-      nameIds.forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.textContent = name;
-      });
+      if (typeof window.__fsApplyBrandSlot === "function") {
+        window.__fsApplyBrandSlot("all");
+      }
 
-      // ── Apply logo ────────────────────────────────────────
-      var logoSets = [
-        ["sidebar-logo-img", "sidebar-logo-icon"],
-        ["login-logo-img",   "login-logo-icon"  ],
-        ["splash-logo-img",  "splash-logo-icon"  ],
-        ["header-logo-img",  "header-logo-icon"  ],
-      ];
-      logoSets.forEach(function(pair) {
-        var img  = document.getElementById(pair[0]);
-        var icon = document.getElementById(pair[1]);
-        if (!img || !icon) return;
-        if (logo) {
-          img.src = logo;
-          img.style.display = "block";
-          icon.style.display = "none";
-        }
-      });
-
-      // ── Apply login page tagline ──────────────────────────
+      var stripName = document.getElementById("co-strip-name");
+      if (stripName) stripName.textContent = d.companyName;
+      var namePreview = document.getElementById("co-name-preview");
+      if (namePreview) namePreview.textContent = d.companyName;
       var tagEl = document.getElementById("login-company-tagline");
-      if (tagEl) tagEl.textContent = tag || "Secure Admin Portal";
-
-      // ── Set document title ────────────────────────────────
-      document.title = name + " \u2013 Admin Dashboard";
-
-      // ── Expose to JS for export functions etc. ─────────────
-      window._companyName = name;
-
-      // Branding pre-loaded from localStorage
+      if (tagEl) tagEl.textContent = d.tagline || "Secure Admin Portal";
     } catch (e) {
-      // localStorage may be blocked (private mode, storage quota) — safe to ignore
+      // localStorage may be blocked — safe to ignore
     }
 
     // Firebase ES module loads asynchronously — gate login until auth is registered.
@@ -17512,7 +17590,7 @@
 
     /** Apply branding everywhere: sidebar, header, login page, company-page preview */
     function applyBranding(data) {
-      const name    = data.companyName  || "AdminPanel";
+      const name    = data.companyName  || window._companyName || "";
       const logo    = data.logoBase64   || "";
       const tagline = data.tagline      || "";
 
@@ -17533,7 +17611,10 @@
 
       // Sidebar brand
       const sbn = document.getElementById("sidebar-company-name");
-      if (sbn) sbn.textContent = name;
+      if (sbn && name) {
+        sbn.textContent = name;
+        sbn.classList.remove("brand-skeleton");
+      }
       setLogo("sidebar-logo-wrap", "sidebar-logo-img", "sidebar-logo-icon", logo);
 
       // Header
@@ -17542,7 +17623,10 @@
       // ─ LOGIN PAGE branding ───────────────────────────────
       const loginName    = document.getElementById("login-company-name");
       const loginTagline = document.getElementById("login-company-tagline");
-      if (loginName)    loginName.textContent    = name;
+      if (loginName && name) {
+        loginName.textContent = name;
+        loginName.classList.remove("brand-skeleton");
+      }
       if (loginTagline) loginTagline.textContent = tagline || "Secure Admin Portal";
       setLogo("login-logo-wrap", "login-logo-img", "login-logo-icon", logo);
 
@@ -18339,6 +18423,11 @@
       document.documentElement.classList.add("route-ready");
       const loader = document.getElementById("page-route-loader");
       if (loader) loader.setAttribute("aria-busy", "false");
+      const boot = document.getElementById("app-boot-screen");
+      if (boot) {
+        boot.setAttribute("aria-hidden", "true");
+        boot.setAttribute("aria-busy", "false");
+      }
     }
     window.dismissRouteBoot = dismissRouteBoot;
 

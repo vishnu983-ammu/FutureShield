@@ -1,6 +1,7 @@
 {
   "name": "futureshield",
   "version": "1.0.0",
+  "private": true,
   "description": "FutureShield Admin Dashboard + WhatsApp + APK distribution services",
   "main": "whatsapp-server.js",
   "scripts": {
